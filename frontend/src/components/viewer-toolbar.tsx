@@ -1,4 +1,3 @@
-'use client';
 
 import { useViewStore } from '@/utils/stores/view-store';
 import { useAnalysisStore } from '@/utils/stores/analysis-store';

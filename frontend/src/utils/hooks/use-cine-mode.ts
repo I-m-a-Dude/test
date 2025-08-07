@@ -1,4 +1,3 @@
-'use client';
 
 import { useEffect, useRef } from 'react';
 import { useAnalysisStore } from '@/utils/stores/analysis-store';

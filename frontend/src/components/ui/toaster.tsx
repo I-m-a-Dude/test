@@ -1,4 +1,4 @@
-"use client"
+
 
 import { useToast } from "@/utils/hooks/use-toast"
 import {
