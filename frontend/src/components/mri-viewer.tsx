@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import * as nifti from 'nifti-reader-js';
 import pako from 'pako';
@@ -15,12 +14,19 @@ export function MriViewer() {
   const file = useMriStore((state) => state.file);
   const { slice, zoom, axis, pan, setPan, setMaxSlices, zoomIn, zoomOut } = useViewStore();
   const { 
-    brightness, 
-    contrast, 
+    brightness,
+    contrast,
+    windowCenter,
+    windowWidth,
     sliceThickness,
-    setHistogramData, 
-    setProfileCurveData, 
-    setMetadata 
+    useWindowing,
+    setHistogramData,
+    setProfileCurveData,
+    setMetadata,
+    setWindowCenter,
+    setWindowWidth,
+    setIntensityRange,
+    setCanvasRef,
   } = useAnalysisStore();
 
   const [niftiHeader, setNiftiHeader] = useState<nifti.NIFTI1 | nifti.NIFTI2 | null>(null);
@@ -28,7 +34,7 @@ export function MriViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
@@ -36,6 +42,7 @@ export function MriViewer() {
     const loadNiftiFile = async () => {
       setLoading(true);
       setError(null);
+
       if (!file) {
         setError('No MRI file found. Please go back and upload a file first.');
         setLoading(false);
@@ -43,79 +50,126 @@ export function MriViewer() {
       }
 
       try {
+        console.log(`Loading file: ${file.name}, size: ${file.size} bytes`);
+
         const fileBuffer = await file.arrayBuffer();
         let niftiBuffer = fileBuffer;
 
-        if (nifti.isCompressed(niftiBuffer)) {
+        // Check if compressed and decompress if needed
+        if (nifti.isCompressed && nifti.isCompressed(niftiBuffer)) {
+          console.log('File is compressed, decompressing...');
           niftiBuffer = pako.inflate(new Uint8Array(niftiBuffer)).buffer;
         }
 
-        if (nifti.isNIFTI(niftiBuffer)) {
-          const header = nifti.readHeader(niftiBuffer);
-          const image = nifti.readImage(header, niftiBuffer);
-          setNiftiHeader(header);
-          setNiftiImage(image);
-
-          setMaxSlices({
-            axial: header.dims[3],
-            sagittal: header.dims[1],
-            coronal: header.dims[2],
-          });
-          
-          calculateAndSetChartData(header, image, setHistogramData, setProfileCurveData);
-          setMetadata({
-            'Description': header.description,
-            'Dimensions': header.dims,
-            'Voxel Size': header.pixDims,
-            'Data Type': getDataType(header.datatype),
-            'Endianness': header.little_endian ? 'Little' : 'Big',
-            'Calibration Max': header.cal_max,
-            'Calibration Min': header.cal_min,
-            'Slice Duration': header.slice_duration,
-            'Time Offset': header.toffset,
-            'Q-form Code': header.qform_code,
-            'S-form Code': header.sform_code,
-            'Quaternion B': header.quatern_b,
-            'Quaternion C': header.quatern_c,
-            'Quaternion D': header.quatern_d,
-            'Q-offset X': header.qoffset_x,
-            'Q-offset Y': header.qoffset_y,
-            'Q-offset Z': header.qoffset_z,
-            'S-Row X': header.srow_x,
-            'S-Row Y': header.srow_y,
-            'S-Row Z': header.srow_z,
-            'Intent Name': header.intent_name,
-          });
-
-        } else {
+        // Check if valid NIfTI file
+        if (nifti.isNIFTI && !nifti.isNIFTI(niftiBuffer)) {
           setError('The provided file is not a valid NIfTI file.');
+          setLoading(false);
+          return;
         }
+
+        const header = nifti.readHeader(niftiBuffer);
+        if (!header) {
+          setError('Failed to read NIfTI header.');
+          setLoading(false);
+          return;
+        }
+
+        console.log('NIfTI Header:', header);
+
+        const image = nifti.readImage(header, niftiBuffer);
+        if (!image) {
+          setError('Failed to read NIfTI image data.');
+          setLoading(false);
+          return;
+        }
+
+        console.log(`Image data loaded: ${image.byteLength} bytes`);
+
+        setNiftiHeader(header);
+        setNiftiImage(image);
+
+        // Set max slices with proper validation
+        const dims = header.dims || [];
+        setMaxSlices({
+          axial: dims[3] || 1,
+          sagittal: dims[1] || 1,
+          coronal: dims[2] || 1,
+        });
+
+        // Calculate chart data and get optimal windowing
+        const windowing = calculateAndSetChartData(header, image, setHistogramData, setProfileCurveData);
+
+        // Set optimal windowing parameters (for professional mode)
+        setWindowCenter(windowing.windowCenter);
+        setWindowWidth(windowing.windowWidth);
+        setIntensityRange({ min: windowing.min, max: windowing.max });
+
+        console.log('Optimal windowing:', windowing);
+
+        // Set metadata with safe property access
+        setMetadata({
+          'File Name': file.name,
+          'File Size': `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+          'Description': header.description || 'N/A',
+          'Dimensions': `${dims[1]} × ${dims[2]} × ${dims[3]}`,
+          'Voxel Size': `${header.pixDims?.[1]?.toFixed(2) || 'N/A'} × ${header.pixDims?.[2]?.toFixed(2) || 'N/A'} × ${header.pixDims?.[3]?.toFixed(2) || 'N/A'} mm`,
+          'Data Type': getDataType(header.datatype || header.datatypeCode || 0),
+          'Endianness': header.little_endian ? 'Little' : 'Big',
+          'Intensity Range': `${windowing.min.toFixed(2)} - ${windowing.max.toFixed(2)}`,
+          'Calibration Max': header.cal_max || 0,
+          'Calibration Min': header.cal_min || 0,
+          'Scaling Slope': header.scl_slope || 1,
+          'Scaling Intercept': header.scl_inter || 0,
+          'Slice Duration': header.slice_duration || 0,
+          'Time Offset': header.toffset || 0,
+          'Q-form Code': header.qform_code || 0,
+          'S-form Code': header.sform_code || 0,
+          'Intent Name': header.intent_name || 'N/A',
+        });
+
       } catch (err) {
         console.error('Error loading or parsing NIfTI file:', err);
-        setError('Failed to load or parse the NIfTI file.');
+        setError(`Failed to load or parse the NIfTI file: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
     };
 
     loadNiftiFile();
-  }, [file, setMaxSlices, setHistogramData, setProfileCurveData, setMetadata]);
-  
-  
+  }, [file, setMaxSlices, setHistogramData, setProfileCurveData, setMetadata, setWindowCenter, setWindowWidth, setIntensityRange]);
+
+
   useEffect(() => {
     if (!loading && !error && niftiHeader && niftiImage && canvasRef.current) {
-      drawSlice({
-        canvas: canvasRef.current,
-        header: niftiHeader,
-        image: niftiImage,
-        slice,
-        axis,
-        brightness,
-        contrast,
-        sliceThickness,
-      });
+      try {
+        drawSlice({
+          canvas: canvasRef.current,
+          header: niftiHeader,
+          image: niftiImage,
+          slice,
+          axis,
+          brightness,
+          contrast,
+          windowCenter,
+          windowWidth,
+          sliceThickness,
+          useWindowing,
+        });
+      } catch (err) {
+        console.error('Error drawing slice:', err);
+        setError(`Failed to render slice: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
-  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, sliceThickness]);
+  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, windowCenter, windowWidth, sliceThickness, useWindowing]);
+
+  // Set canvas reference in store for export functionality
+  useEffect(() => {
+    if (canvasRef.current) {
+      setCanvasRef(canvasRef.current);
+    }
+    return () => setCanvasRef(null);
+  }, [setCanvasRef]);
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -125,14 +179,14 @@ export function MriViewer() {
       zoomOut();
     }
   };
-  
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return; // Only pan on left-click
     e.preventDefault();
     setIsPanning(true);
     setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
-  
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isPanning) return;
     e.preventDefault();
@@ -154,10 +208,14 @@ export function MriViewer() {
     }
   };
 
-
   const renderContent = () => {
     if (loading) {
-      return <Skeleton className="w-full h-full" />;
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-4">
+          <Skeleton className="w-full h-full" />
+          <p className="text-sm text-muted-foreground mt-2">Loading MRI data...</p>
+        </div>
+      );
     }
 
     if (error) {
@@ -169,23 +227,34 @@ export function MriViewer() {
         </div>
       );
     }
-    
-    if (niftiHeader) {
+
+    if (niftiHeader && niftiImage) {
+       const maxSlices = useViewStore.getState().maxSlices;
        return (
         <>
-            <canvas 
+            <canvas
                 ref={canvasRef}
                 className="transition-transform duration-200"
-                style={{ 
-                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, 
-                    imageRendering: 'pixelated' 
+                style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    imageRendering: 'pixelated'
                 }}
             />
-            <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                Slice: {Math.round(slice) + 1} / {useViewStore.getState().maxSlices[axis]}
+            <div className="absolute top-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                Slice: {Math.round(slice) + 1} / {maxSlices[axis]}
             </div>
-             <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded capitalize">
+            <div className="absolute top-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded capitalize backdrop-blur">
                 {axis} View
+            </div>
+            <div className="absolute bottom-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                {useWindowing ? (
+                  `WC: ${windowCenter.toFixed(0)} WW: ${windowWidth.toFixed(0)}`
+                ) : (
+                  `B: ${brightness}% C: ${contrast}%`
+                )}
+            </div>
+            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded backdrop-blur">
+                Zoom: {(zoom * 100).toFixed(0)}%
             </div>
         </>
        );

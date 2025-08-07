@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from 'react';
 import { useAnalysisStore } from '@/utils/stores/analysis-store';
 import { useViewStore } from '@/utils/stores/view-store';
@@ -19,16 +18,17 @@ export function useCineMode() {
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     }
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [isCineMode, maxSlices, axis, setSlice]);
-
 
   useEffect(() => {
     // This effect resets the slice to 0 when CineMode is turned on.
