@@ -24,6 +24,34 @@ Am ales o **arhitectură monolitică modulară, pe straturi (layered)**, pentru 
 
 ## Structura proiectului
 
+Pentru a menține fișierele din fiecare folder cât mai simple și ușor de înțeles, poți urma aceste principii:
+
+1. **Separa responsabilitățile clar**:
+   - Fiecare fișier ar trebui să aibă o singură responsabilitate clar definită.
+   - Evită să combini funcționalități multiple într-un singur fișier.
+
+2. **Minimizează numărul de fișiere**:
+   - Dacă un folder conține mai multe fișiere mici, încearcă să le grupezi logic într-un singur fișier, dacă este posibil și nu afectează claritatea.
+
+3. **Documentează codul**:
+   - Adaugă comentarii concise și clare pentru a explica scopul fiecărui fișier și funcție.
+
+4. **Structură modulară**:
+   - În fiecare folder, păstrează fișierele organizate astfel încât să reflecte fluxul aplicației (de exemplu, `preprocessing.py`, `inference.py`, `postprocessing.py` în `services/`).
+
+5. **Evită redundanța**:
+   - Reutilizează funcții comune printr-un modul `utils/` sau similar, în loc să le duplici în mai multe fișiere.
+
+6. **Exemple pentru fiecare folder**:
+   - `api/`: Un fișier per endpoint sau grup logic de endpoint-uri (ex. `upload.py`, `download.py`).
+   - `services/`: Un fișier pentru fiecare etapă majoră a fluxului (ex. `preprocessing.py`, `inference.py`, `postprocessing.py`).
+   - `models/`: Un fișier pentru fiecare model sau tip de model (ex. `segresnet.py`).
+   - `core/`: Fișiere pentru configurare și logging (ex. `config.py`, `logger.py`).
+   - `utils/`: Funcții generale (ex. `nifti_io.py`, `file_utils.py`).
+
+Astfel, vei avea o structură clară, cu fișiere puține și ușor de înțeles.
+
+
 ```
 project-root/
 ├── src/
