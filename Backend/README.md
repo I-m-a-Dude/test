@@ -4,7 +4,7 @@
 
 * **Upload fișier NIfTI** (`.nii`, `.nii.gz`) prin endpoint FastAPI
 * **Preprocesare** volum 3D (normalizare intensități, resampling la rezoluție standard, crop/padding)
-* **Inferență model de segmentare** (SegResNet salvat) pentru extragerea regiunilor țintă
+* **Inferență model de segmentare** (model salvat) pentru extragerea regiunilor țintă
 * **Postprocesare** rezultat (smooth, reconstrucție și export în același format NIfTI)
 * **Descărcare fișier segmentat** prin API
 
@@ -73,7 +73,7 @@ Fluxul complet al aplicației urmează pașii de mai jos:
 
 3. **Inferență**
 
-   * Modelul salvat (SegResNet) este încărcat din calea specificată în configurație.
+   * Modelul salvat este încărcat din calea specificată în configurație.
    * Se rulează inferența pe volumul preprocesat pentru segmentare.
 
 4. **Postprocesare**
