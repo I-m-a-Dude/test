@@ -1,0 +1,11 @@
+numpy
+nibabel
+scipy
+scikit-image
+scikit-learn
+matplotlib
+polars
+monai
+torch
+numba
+torchmetrics

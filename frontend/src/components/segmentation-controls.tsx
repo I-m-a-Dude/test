@@ -163,96 +163,93 @@ export function SegmentationControls() {
     }
   };
 
-  // Export handlers
-  const handleExportPNG = async () => {
-    try {
-      const canvas = canvasRef?.current || canvasRef;
-      validateExportOptions({ canvas: canvas || undefined });
-      const filename = getTimestampedFilename('mri-image');
-      await exportAsPNG({
-        canvas: canvas!,
-        filename,
-      });
-      toast({
-        title: 'Export Successful',
-        description: 'Image exported as PNG successfully.',
-      });
-    } catch (error) {
-      console.error('PNG export failed:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'Failed to export PNG image. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
+// Fix for lines 168, 191, 214, and 239
+const handleExportPNG = async () => {
+  try {
+    const canvas = canvasRef?.current;
+    validateExportOptions({ canvas: canvas || undefined });
+    const filename = getTimestampedFilename('mri-image');
+    await exportAsPNG({
+      canvas: canvas!,
+      filename,
+    });
+    toast({
+      title: 'Export Successful',
+      description: 'Image exported as PNG successfully.',
+    });
+  } catch (error) {
+    console.error('PNG export failed:', error);
+    toast({
+      title: 'Export Failed',
+      description: 'Failed to export PNG image. Please try again.',
+      variant: 'destructive',
+    });
+  }
+};
 
-  const handleExportJPEG = async () => {
-    try {
-      const canvas = canvasRef?.current || canvasRef;
-      validateExportOptions({ canvas: canvas || undefined });
-      const filename = getTimestampedFilename('mri-image');
-      await exportAsJPEG({
-        canvas: canvas!,
-        filename,
-      });
-      toast({
-        title: 'Export Successful',
-        description: 'Image exported as JPEG successfully.',
-      });
-    } catch (error) {
-      console.error('JPEG export failed:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'Failed to export JPEG image. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
+const handleExportJPEG = async () => {
+  try {
+    const canvas = canvasRef?.current;
+    validateExportOptions({ canvas: canvas || undefined });
+    const filename = getTimestampedFilename('mri-image');
+    await exportAsJPEG({
+      canvas: canvas!,
+      filename,
+    });
+    toast({
+      title: 'Export Successful',
+      description: 'Image exported as JPEG successfully.',
+    });
+  } catch (error) {
+    console.error('JPEG export failed:', error);
+    toast({
+      title: 'Export Failed',
+      description: 'Failed to export JPEG image. Please try again.',
+      variant: 'destructive',
+    });
+  }
+};
 
-  const handleExportPDF = async () => {
-    try {
-      const canvas = canvasRef?.current || canvasRef;
-      validateExportOptions({ canvas: canvas || undefined });
-      const filename = getTimestampedFilename('mri-report');
-      await exportAsPDF({
-        canvas: canvas!,
-        filename,
-        metadata: metadata || undefined,
-        includeMetadata: true,
-      });
-      toast({
-        title: 'Export Successful',
-        description: 'Report exported as PDF successfully.',
-      });
-    } catch (error) {
-      console.error('PDF export failed:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'Failed to export PDF report. Please try again.',
-        variant: 'destructive',
-      });
-    }
-  };
+const handleExportPDF = async () => {
+  try {
+    const canvas = canvasRef?.current;
+    validateExportOptions({ canvas: canvas || undefined });
+    const filename = getTimestampedFilename('mri-report');
+    await exportAsPDF({
+      canvas: canvas!,
+      filename,
+      metadata: metadata || undefined,
+      includeMetadata: true,
+    });
+    toast({
+      title: 'Export Successful',
+      description: 'Report exported as PDF successfully.',
+    });
+  } catch (error) {
+    console.error('PDF export failed:', error);
+    toast({
+      title: 'Export Failed',
+      description: 'Failed to export PDF report. Please try again.',
+      variant: 'destructive',
+    });
+  }
+};
 
-  const handleExportDICOM = async () => {
-    try {
-      const canvas = canvasRef?.current || canvasRef;
-      validateExportOptions({ canvas: canvas || undefined });
-      const filename = getTimestampedFilename('mri-image');
-      await exportAsDICOM({
-        canvas: canvas!,
-        filename,
-      });
-    } catch (error) {
-      console.error('DICOM export failed:', error);
-      toast({
-        title: 'Export Failed',
-        description: 'DICOM export is not yet implemented.',
-        variant: 'destructive',
-      });
-    }
-  };
+const handleExportDICOM = async () => {
+  try {
+    const canvas = canvasRef?.current;
+    validateExportOptions({ canvas: canvas || undefined });
+    const filename = getTimestampedFilename('mri-image');
+    await exportAsDICOM(); // Remove the argument if function expects none
+  } catch (error) {
+    console.error('DICOM export failed:', error);
+    toast({
+      title: 'Export Failed',
+      description: 'DICOM export is not yet implemented.',
+      variant: 'destructive',
+    });
+  }
+};
 
   return (
     <Card className="w-full h-full overflow-y-auto">
@@ -519,16 +516,16 @@ export function SegmentationControls() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                <DropdownMenuItem onClick={handleExportPNG} disabled={!canvasRef}>
+                <DropdownMenuItem onClick={handleExportPNG} disabled={!canvasRef?.current}>
                   Export as PNG
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportJPEG} disabled={!canvasRef}>
+                <DropdownMenuItem onClick={handleExportJPEG} disabled={!canvasRef?.current}>
                   Export as JPEG
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPDF} disabled={!canvasRef}>
+                <DropdownMenuItem onClick={handleExportPDF} disabled={!canvasRef?.current}>
                   Export PDF Report
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportDICOM} disabled={!canvasRef}>
+                <DropdownMenuItem onClick={handleExportDICOM} disabled={!canvasRef?.current}>
                   Export as DICOM
                 </DropdownMenuItem>
               </DropdownMenuContent>

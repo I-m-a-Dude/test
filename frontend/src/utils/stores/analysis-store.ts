@@ -20,7 +20,7 @@ interface AnalysisState {
   metadata: Record<string, any> | null;
   intensityRange: { min: number; max: number };
   useWindowing: boolean; // Toggle between simple and professional controls
-  canvasRef: HTMLCanvasElement | null; // Reference to the main canvas for export
+  canvasRef: React.RefObject<HTMLCanvasElement> | null;
   setMultiPlanarView: (value: boolean) => void;
   setThreeDReconstruction: (value: boolean) => void;
   setShowHistogram: (value: boolean) => void;
