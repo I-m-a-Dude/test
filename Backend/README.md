@@ -57,7 +57,7 @@ project-root/
 ├── src/
 │   ├── api/           # Endpoints FastAPI
 │   ├── services/      # Preprocesare, inferență, postprocesare
-│   ├── models/        # Wrapper model SegResNet
+│   ├── models/        # Wrapper model
 │   ├── core/          # Config, logging
 │   ├── utils/         # I/O NIfTI (nibabel)
 │   └── main.py        # Instanțiere FastAPI
