@@ -23,24 +23,24 @@ __version__ = "1.0.0"
 # Informații despre API
 API_INFO = {
     "title": "Pediatric Segmentation API",
-    "description": "API pentru segmentarea pediatrică a imaginilor medicale NIfTI",
+    "description": "API pentru segmentarea pediatrica a imaginilor medicale NIfTI",
     "version": __version__,
     "endpoints": {
         "health": {
             "/api/health/": "Health check basic",
             "/api/health/detailed": "Health check detaliat",
-            "/api/health/stats": "Statistici aplicație",
-            "/api/health/cleanup": "Curăță fișierele vechi",
+            "/api/health/stats": "Statistici aplicatie",
+            "/api/health/cleanup": "Curata fisierele vechi",
             "/api/health/ready": "Readiness probe pentru K8s",
             "/api/health/live": "Liveness probe pentru K8s"
         },
         "upload": {
-            "/api/upload/validate": "Validează fișier înainte de upload",
-            "/api/upload/": "Upload și procesare fișier NIfTI",
-            "/api/upload/status/{task_id}": "Verifică statusul procesării",
-            "/api/upload/download/{task_id}": "Descarcă rezultatul",
-            "/api/upload/task/{task_id}": "Șterge task și fișiere",
-            "/api/upload/tasks": "Listează toate task-urile"
+            "/api/upload/validate": "Valideaza fisier inainte de upload",
+            "/api/upload/": "Upload si procesare fisier NIfTI",
+            "/api/upload/status/{task_id}": "Verifica statusul procesarii",
+            "/api/upload/download/{task_id}": "Descarca rezultatul",
+            "/api/upload/task/{task_id}": "Sterge task si fisiere",
+            "/api/upload/tasks": "Listeaza toate task-urile"
         }
     }
 }

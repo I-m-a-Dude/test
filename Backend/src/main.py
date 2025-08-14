@@ -37,7 +37,7 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     debug=settings.debug,
-    description="API pentru segmentarea pediatrică a imaginilor medicale NIfTI"
+    description="API pentru segmentarea pediatrica a imaginilor medicale NIfTI"
 )
 
 # CORS middleware
@@ -54,10 +54,10 @@ app.add_middleware(
 async def startup_event():
     """Eveniment la pornirea aplicației."""
     if core_loaded:
-        logger.info(f"🚀 {settings.app_name} v{settings.app_version} pornește...")
+        logger.info(f"🚀 {settings.app_name} v{settings.app_version} porneste...")
         log_processing_step("startup")
     else:
-        print("🚀 API pornește (core module cu probleme)")
+        print("🚀 API porneste (core module cu probleme)")
 
 
 @app.get("/")
@@ -100,18 +100,18 @@ async def health_check():
 async def test_core():
     """Testează modulul core."""
     if not core_loaded:
-        return {"error": "Core module nu s-a încărcat"}
+        return {"error": "Core module nu s-a incarcat"}
 
     try:
         return {
-            "core_status": "✅ Funcțional",
+            "core_status": "✅ Functional",
             "settings": {
                 "app_name": settings.app_name,
                 "debug": settings.debug,
                 "upload_dir": getattr(settings, 'upload_dir', 'N/A'),
                 "model_device": getattr(settings, 'model_device', 'N/A')
             },
-            "logger": "✅ Funcțional"
+            "logger": "✅ Functional"
         }
     except Exception as e:
         return {"error": f"Core test failed: {e}"}
@@ -121,14 +121,14 @@ async def test_core():
 async def test_utils():
     """Testează modulul utils."""
     if not utils_loaded:
-        return {"error": "Utils module nu s-a încărcat"}
+        return {"error": "Utils module nu s-a incarcat"}
 
     try:
         stats = get_directory_stats()
         validation = file_manager.validate_file_upload("test.nii.gz", 50000000)
 
         return {
-            "utils_status": "✅ Funcțional",
+            "utils_status": "✅ Functional",
             "directory_stats": stats,
             "file_validation_test": validation
         }
