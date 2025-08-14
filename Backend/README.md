@@ -43,9 +43,9 @@ Pentru a menține fișierele din fiecare folder cât mai simple și ușor de în
    - Reutilizează funcții comune printr-un modul `utils/` sau similar, în loc să le duplici în mai multe fișiere.
 
 6. **Exemple pentru fiecare folder**:
-   - `api/`: Un fișier per endpoint sau grup logic de endpoint-uri (ex. `upload.py`, `download.py`).
+   - `api/`: Un fișier per endpoint sau grup logic de endpoint-uri (ex. `upload.py`, `health.py`).
    - `services/`: Un fișier pentru fiecare etapă majoră a fluxului (ex. `preprocessing.py`, `inference.py`, `postprocessing.py`).
-   - `models/`: Un fișier pentru fiecare model sau tip de model (ex. `segresnet.py`).
+   - `models/`: Un fișier pentru fiecare model sau tip de model (ex. `model.py`).
    - `core/`: Fișiere pentru configurare și logging (ex. `config.py`, `logger.py`).
    - `utils/`: Funcții generale (ex. `nifti_io.py`, `file_utils.py`).
 
@@ -89,28 +89,26 @@ Acest setup oferă un echilibru între simplitate și claritate, ideal pentru de
 Fluxul complet al aplicației urmează pașii de mai jos:
 
 1. **Recepție și validare fișier**
-
    * Frontend-ul React trimite un fișier NIfTI (`.nii`/`.nii.gz`) la endpoint-ul `/upload`.
    * FastAPI validează tipul și dimensiunea fișierului.
 
 2. **Preprocesare**
-
    * Se citește volumul folosind `nibabel`.
    * Se normalizează intensitățile și se resamplează la rezoluție standard.
    * Se aplică crop sau padding pentru dimensiuni uniforme.
 
 3. **Inferență**
-
    * Modelul salvat este încărcat din calea specificată în configurație.
    * Se rulează inferența pe volumul preprocesat pentru segmentare.
 
 4. **Postprocesare**
-
    * Se aplică smooth și filtru morfologic pentru rafinarea segmentării.
-   * Se reconstruieste volumul și se salvează într-un fișier NIfTI nou.
+   * Se reconstruiește volumul și se salvează într-un fișier NIfTI nou.
 
-5. **Returnarea rezultatului**
-
-   * API generează un răspuns cu fișierul segmentat, disponibil pentru descărcare pe frontend.
+5. **Returnarea rezultatului către frontend**
+   * API returnează fișierul `.nii.gz` segmentat direct în răspuns
+   * Frontend-ul primește fișierul și îl procesează pentru vizualizare
+   * Rezultatul segmentării este afișat pe ecran în browser (slice viewer 3D)
+   * Nu se face descărcare - totul rămâne în aplicația web
 
 Acest workflow modular asigură claritate, testabilitate și posibilitatea de extindere ulterioară.
