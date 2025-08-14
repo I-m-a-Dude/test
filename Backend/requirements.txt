@@ -9,3 +9,9 @@ monai
 torch
 numba
 torchmetrics
+pydantic-settings
+fastapi
+uvicorn
+pydantic
+# Adaugă această dependință pentru health monitoring:
+psutil
