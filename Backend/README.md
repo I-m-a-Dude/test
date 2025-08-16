@@ -1,12 +1,12 @@
 # Licenta Pediatric Segmentation Demo
 
-## Functionalități
+## Funcționalități
 
-* **Upload fișier NIfTI** (`.nii`, `.nii.gz`) prin endpoint FastAPI
+* **Recepție date NIfTI** de la frontend prin endpoint FastAPI
 * **Preprocesare** volum 3D (normalizare intensități, resampling la rezoluție standard, crop/padding)
 * **Inferență model de segmentare** (model salvat) pentru extragerea regiunilor țintă
-* **Postprocesare** rezultat (smooth, reconstrucție și export în același format NIfTI)
-* **Descărcare fișier segmentat** prin API
+* **Postprocesare** rezultat (smooth, reconstrucție și returnare către frontend)
+* **Returnare rezultat segmentat** către frontend pentru vizualizare
 
 ## Arhitectură
 
@@ -45,29 +45,44 @@ Pentru a menține fișierele din fiecare folder cât mai simple și ușor de în
 6. **Exemple pentru fiecare folder**:
    - `api/`: Un fișier per endpoint sau grup logic de endpoint-uri (ex. `upload.py`, `health.py`).
    - `services/`: Un fișier pentru fiecare etapă majoră a fluxului (ex. `preprocessing.py`, `inference.py`, `postprocessing.py`).
-   - `models/`: Un fișier pentru fiecare model sau tip de model (ex. `model.py`).
+   - `models/`: Un fișier pentru fiecare model sau tip de model (ex. `model_wrapper.py`).
    - `core/`: Fișiere pentru configurare și logging (ex. `config.py`, `logger.py`).
    - `utils/`: Funcții generale (ex. `nifti_io.py`, `file_utils.py`).
 
 Astfel, vei avea o structură clară, cu fișiere puține și ușor de înțeles.
 
-
 ```
-project-root/
+Backend/
+├── docs/              # Documentație suplimentară
+├── model/             # Modele salvate (pesos/weights)
+├── outputs/           # Rezultate procesate
 ├── src/
 │   ├── api/           # Endpoints FastAPI
-│   ├── services/      # Preprocesare, inferență, postprocesare
+│   │   ├── __init__.py
+│   │   ├── health.py      # Health check endpoint
+│   │   └── upload.py      # Upload și procesare endpoint
+│   ├── core/          # Config și logging
+│   │   ├── __init__.py
+│   │   ├── config.py      # Configurări aplicație
+│   │   └── logger.py      # Setup logging
 │   ├── models/        # Wrapper model
-│   ├── core/          # Config, logging
-│   ├── utils/         # I/O NIfTI (nibabel)
-│   └── main.py        # Instanțiere FastAPI
-│
+│   │   ├── __init__.py
+│   │   └── model_wrapper.py  # Încărcare și inferență model
+│   ├── services/      # Preprocesare, inferență, postprocesare
+│   │   ├── __init__.py
+│   │   ├── inference.py      # Serviciu inferență
+│   │   ├── postprocessing.py # Postprocesare rezultate
+│   │   └── preprocessing.py  # Preprocesare date input
+│   ├── utils/         # I/O NIfTI și utilități
+│   │   ├── __init__.py
+│   │   ├── file_utils.py     # Operații fișiere generale
+│   │   └── nifti_io.py       # Citire/scriere NIfTI cu nibabel
+│   └── main.py        # Instanțiere FastAPI și pornire server
+├── temp/              # Fișiere temporare
 ├── tests/             # Teste unitare și de integrare
-├── docs/              # Documentație suplimentară (architecture.md)
-├── Dockerfile         # Containerizare (Python + FastAPI + model)
-├── requirements.txt   # Dependențe Python
-├── .env.example       # Variabile de mediu (cale model, port, etc.)
-└── README.md          # Descriere proiect
+├── uploads/           # Fișiere uploadate de utilizatori
+├── README.md          # Descriere proiect
+└── requirements.txt   # Dependențe Python
 ```
 
 ## Dependențe principale
