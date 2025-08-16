@@ -1,33 +1,82 @@
 import { useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, File, X, Loader2 } from 'lucide-react';
+import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import { useToast } from '@/utils/hooks/use-toast';
 import { useMriStore } from '@/utils/stores/mri-store';
 import { pages } from '@/utils/pages';
 import { useResultStore } from '@/utils/stores/result-store';
+import { uploadMriFile } from '@/utils/api';
+
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 export function MriUploader() {
   const setMriFile = useMriStore((state) => state.setFile);
   const mriFile = useMriStore((state) => state.file);
   const setAnalysisResult = useResultStore((state) => state.setAnalysisResult);
-  
+
   const [isDragging, setIsDragging] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleFile = (selectedFile: File | undefined | null) => {
+  const handleFileUpload = async (file: File) => {
+    setUploadStatus('uploading');
+    setUploadProgress(0);
+
+    try {
+      const response = await uploadMriFile(
+        file,
+        (progress) => setUploadProgress(progress) // Progress callback
+      );
+
+      console.log('✅ Upload reușit:', response);
+
+      setUploadStatus('success');
+      setUploadProgress(100);
+
+      toast({
+        title: 'Upload reușit!',
+        description: `Fișierul ${file.name} a fost trimis către server.`,
+      });
+
+      return response;
+
+    } catch (error) {
+      console.error('❌ Eroare upload:', error);
+      setUploadStatus('error');
+
+      toast({
+        title: 'Eroare la upload',
+        description: error instanceof Error ? error.message : 'A apărut o eroare necunoscută.',
+        variant: 'destructive',
+      });
+
+      throw error;
+    }
+  };
+
+  const handleFile = async (selectedFile: File | undefined | null) => {
     if (selectedFile) {
       if (selectedFile.name.endsWith('.nii') || selectedFile.name.endsWith('.nii.gz')) {
         setMriFile(selectedFile);
-        // Clear any previous analysis result when a new file is uploaded
         setAnalysisResult(null, null);
+
+        // Trimite fișierul către backend folosind api.ts
+        try {
+          await handleFileUpload(selectedFile);
+        } catch (error) {
+          // Errorurile sunt gestionate în funcția handleFileUpload
+          console.error('Upload failed:', error);
+        }
       } else {
         toast({
-          title: 'Invalid File Type',
-          description: 'Please upload a .nii or .nii.gz file.',
+          title: 'Tip de fișier invalid',
+          description: 'Te rog încarcă un fișier .nii sau .nii.gz.',
           variant: 'destructive',
         });
       }
@@ -55,11 +104,11 @@ export function MriUploader() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 1) {
       toast({
-        title: 'Multiple Files Not Allowed',
-        description: 'Please upload only one file at a time.',
+        title: 'Multiple fișiere nu sunt permise',
+        description: 'Te rog încarcă doar un fișier odată.',
         variant: 'destructive',
       });
       return;
@@ -71,14 +120,41 @@ export function MriUploader() {
 
   const handleRemoveFile = () => {
     setMriFile(null);
-    // Clear any previous analysis result when the file is removed
     setAnalysisResult(null, null);
+    setUploadStatus('idle');
+    setUploadProgress(0);
   };
 
   const handleNavigateToAnalysis = () => {
     if (mriFile) {
       setIsNavigating(true);
       navigate(pages.analysis);
+    }
+  };
+
+  const getUploadStatusIcon = () => {
+    switch (uploadStatus) {
+      case 'uploading':
+        return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
+      case 'success':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'error':
+        return <AlertCircle className="h-5 w-5 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const getUploadStatusText = () => {
+    switch (uploadStatus) {
+      case 'uploading':
+        return 'Se încarcă pe server...';
+      case 'success':
+        return 'Încărcat cu succes';
+      case 'error':
+        return 'Eroare la încărcare';
+      default:
+        return '';
     }
   };
 
@@ -113,12 +189,12 @@ export function MriUploader() {
                 />
               </div>
               <p className="text-lg font-semibold text-foreground">
-                {isDragging ? 'Drop your file here!' : 'Upload MRI Scan'}
+                {isDragging ? 'Eliberează fișierul aici!' : 'Încarcă scanul MRI'}
               </p>
               <p className="text-muted-foreground text-sm mt-1">
-                Drag & drop or click to select a file
+                Drag & drop sau click pentru a selecta un fișier
               </p>
-              <p className="text-xs text-muted-foreground mt-4">.nii or .nii.gz files only</p>
+              <p className="text-xs text-muted-foreground mt-4">Doar fișiere .nii sau .nii.gz</p>
             </div>
             <input
               id="file-upload"
@@ -126,6 +202,7 @@ export function MriUploader() {
               className="sr-only"
               accept=".nii,.nii.gz"
               onChange={(e) => handleFile(e.target.files?.[0])}
+              disabled={uploadStatus === 'uploading'}
             />
           </label>
         </div>
@@ -134,13 +211,54 @@ export function MriUploader() {
           <div className="flex items-center gap-3 bg-muted p-3 rounded-md w-full max-w-md">
             <File className="h-6 w-6 text-primary" />
             <span className="font-mono text-sm truncate flex-1">{mriFile.name}</span>
-            <Button variant="ghost" size="icon" onClick={handleRemoveFile} className="h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {getUploadStatusIcon()}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRemoveFile}
+                className="h-8 w-8"
+                disabled={uploadStatus === 'uploading'}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <Button onClick={handleNavigateToAnalysis} disabled={isNavigating} size="lg" className="rounded-full">
+
+          {/* Status upload */}
+          {uploadStatus !== 'idle' && (
+            <div className="w-full max-w-md">
+              <div className="flex items-center justify-between text-sm mb-2">
+                <span className={cn(
+                  uploadStatus === 'success' && 'text-green-600',
+                  uploadStatus === 'error' && 'text-red-600',
+                  uploadStatus === 'uploading' && 'text-blue-600'
+                )}>
+                  {getUploadStatusText()}
+                </span>
+                {uploadStatus === 'uploading' && (
+                  <span className="text-muted-foreground">{uploadProgress}%</span>
+                )}
+              </div>
+              {uploadStatus === 'uploading' && (
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <Button
+            onClick={handleNavigateToAnalysis}
+            disabled={isNavigating || uploadStatus === 'uploading'}
+            size="lg"
+            className="rounded-full"
+          >
             {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isNavigating ? 'Processing...' : 'Go to Analysis'}
+            {isNavigating ? 'Se procesează...' : 'Mergi la Analiză'}
           </Button>
         </div>
       )}
