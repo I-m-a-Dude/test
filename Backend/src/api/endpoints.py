@@ -11,7 +11,13 @@ from src.utils.file_utils import validate_file, save_file, list_files, delete_fi
 
 # Import ML pentru test endpoint
 try:
-    from src.ml import get_model_wrapper, ensure_model_loaded
+    from src.ml import (
+        get_model_wrapper,
+        ensure_model_loaded,
+        unload_global_model,
+        force_global_cleanup,
+        get_global_memory_usage
+    )
 
     ML_AVAILABLE = True
 except ImportError as e:
@@ -226,36 +232,38 @@ async def load_model_endpoint():
         )
 
     try:
-        print("[API] Incercare incarcare model...")
+        print("[API] Încercare încărcare model...")
         success = ensure_model_loaded()
 
         if success:
             wrapper = get_model_wrapper()
             model_info = wrapper.get_model_info()
+            memory_info = wrapper.get_memory_usage()
 
-            print("[API] Model incarcat cu succes!")
+            print("[API] Model încărcat cu succes!")
             return {
-                "message": "Model incarcat cu succes",
-                "model_info": model_info
+                "message": "Model încărcat cu succes",
+                "model_info": model_info,
+                "memory_usage": memory_info
             }
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Incarcarea modelului a esuat"
+                detail="Încărcarea modelului a eșuat"
             )
 
     except Exception as e:
-        print(f"[API] Eroare la incarcarea modelului: {str(e)}")
+        print(f"[API] Eroare la încărcarea modelului: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la incarcarea modelului: {str(e)}"
+            detail=f"Eroare la încărcarea modelului: {str(e)}"
         )
 
 
-@router.get("/ml/inspect-model")
-async def inspect_model_file():
+@router.post("/ml/unload-model")
+async def unload_model_endpoint():
     """
-    Inspectează fișierul modelului fără să îl încarce
+    Descarcă modelul ML din memorie și eliberează resursele
     """
     if not ML_AVAILABLE:
         raise HTTPException(
@@ -264,66 +272,104 @@ async def inspect_model_file():
         )
 
     try:
-        from src.core.config import MODEL_PATH
-        import torch
+        print("[API] Încercare descărcare model...")
 
-        if not MODEL_PATH.exists():
+        # Obține informații despre memorie înainte
+        memory_before = get_global_memory_usage()
+
+        # Descarcă modelul
+        success = unload_global_model()
+
+        if success:
+            # Obține informații despre memorie după
+            memory_after = get_global_memory_usage()
+
+            print("[API] Model descărcat cu succes!")
+            return {
+                "message": "Model descărcat cu succes",
+                "memory_before": memory_before,
+                "memory_after": memory_after,
+                "model_loaded": False
+            }
+        else:
             raise HTTPException(
-                status_code=404,
-                detail=f"Fișierul model nu există: {MODEL_PATH}"
+                status_code=500,
+                detail="Descărcarea modelului a eșuat"
             )
 
-        print(f"[API] Inspectare model: {MODEL_PATH}")
-
-        # Încarcă checkpoint pentru inspecție
-        checkpoint = torch.load(MODEL_PATH, map_location='cpu')
-
-        inspection = {
-            "file_path": str(MODEL_PATH),
-            "file_size_mb": MODEL_PATH.stat().st_size / (1024 * 1024),
-            "checkpoint_type": str(type(checkpoint)),
-        }
-
-        if isinstance(checkpoint, dict):
-            inspection.update({
-                "is_dict": True,
-                "keys": list(checkpoint.keys()),
-                "keys_count": len(checkpoint.keys())
-            })
-
-            # Inspectează fiecare key
-            for key, value in checkpoint.items():
-                if isinstance(value, dict):
-                    inspection[f"{key}_info"] = {
-                        "type": "dict",
-                        "keys_count": len(value.keys()),
-                        "sample_keys": list(value.keys())[:5]
-                    }
-                elif hasattr(value, 'shape'):
-                    inspection[f"{key}_info"] = {
-                        "type": "tensor",
-                        "shape": list(value.shape)
-                    }
-                else:
-                    inspection[f"{key}_info"] = {
-                        "type": str(type(value)),
-                        "value": str(value)
-                    }
-        else:
-            inspection.update({
-                "is_dict": False,
-                "direct_type": str(type(checkpoint))
-            })
-
-        return inspection
-
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"[API] Eroare la inspectarea modelului:\n{error_details}")
+        print(f"[API] Eroare la descărcarea modelului: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la inspectarea modelului: {str(e)}"
+            detail=f"Eroare la descărcarea modelului: {str(e)}"
+        )
+
+
+@router.post("/ml/force-cleanup")
+async def force_cleanup_endpoint():
+    """
+    Forțează cleanup complet al tuturor resurselor ML
+    """
+    if not ML_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul ML nu este disponibil"
+        )
+
+    try:
+        print("[API] Cleanup forțat al resurselor ML...")
+
+        # Obține informații despre memorie înainte
+        memory_before = get_global_memory_usage()
+
+        # Cleanup forțat
+        force_global_cleanup()
+
+        # Obține informații despre memorie după
+        memory_after = get_global_memory_usage()
+
+        print("[API] Cleanup forțat completat!")
+        return {
+            "message": "Cleanup forțat completat cu succes",
+            "memory_before": memory_before,
+            "memory_after": memory_after,
+            "all_resources_cleared": True
+        }
+
+    except Exception as e:
+        print(f"[API] Eroare la cleanup forțat: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la cleanup forțat: {str(e)}"
+        )
+
+
+@router.get("/ml/memory-usage")
+async def get_memory_usage():
+    """
+    Returnează informații despre utilizarea memoriei
+    """
+    if not ML_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul ML nu este disponibil"
+        )
+
+    try:
+        memory_info = get_global_memory_usage()
+        wrapper = get_model_wrapper()
+
+        return {
+            "memory_usage": memory_info,
+            "model_loaded": wrapper.is_loaded,
+            "device": str(wrapper.device) if wrapper.device else "none"
+        }
+
+    except Exception as e:
+        print(f"[API] Eroare la citirea memoriei: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la citirea informațiilor despre memorie: {str(e)}"
         )
 
 

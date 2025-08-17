@@ -29,8 +29,8 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(500 * 1024 * 1024)))  # 500MB
 ALLOWED_EXTENSIONS = {'.nii', '.nii.gz', '.zip'}  # Adăugăm .zip
 
 # Configurări ML
-MODELS_DIR = Path(os.getenv("MODELS_DIR", "models"))
-MODEL_PATH = MODELS_DIR / "segmentation_model.pth"
+MODELS_DIR = Path(os.getenv("MODELS_DIR", "model"))
+MODEL_PATH = MODELS_DIR / "ag_model.pth"
 TEMP_PROCESSING_DIR = Path("temp/processing")
 TEMP_RESULTS_DIR = Path("temp/results")
 

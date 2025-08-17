@@ -10,6 +10,7 @@ from typing import Dict, List
 from fastapi import UploadFile, HTTPException
 
 from src.core.config import UPLOAD_DIR, MAX_FILE_SIZE, ALLOWED_EXTENSIONS, get_file_size_mb
+from src.utils.nifti_validation import validate_segmentation_files, get_validation_summary
 
 
 def is_allowed_file(filename: str) -> bool:
@@ -107,16 +108,29 @@ def extract_zip_file(zip_path: Path) -> Dict:
         # Șterge fișierul ZIP original după extragere
         zip_path.unlink()
 
+        # Validează dacă folderul conține fișierele necesare pentru segmentare
+        validation_result = validate_segmentation_files(extract_dir)
+        validation_summary = get_validation_summary(extract_dir)
+
         result = {
             "extracted_folder": extract_dir.name,
             "extracted_path": str(extract_dir.absolute()),
             "total_files": len(extracted_files),
             "nifti_files_count": len(nifti_files),
             "nifti_files": nifti_files,
-            "all_files": extracted_files
+            "all_files": extracted_files,
+            "segmentation_validation": {
+                "is_valid_for_segmentation": validation_result["is_valid"],
+                "found_modalities": validation_result["found_modalities"],
+                "missing_modalities": validation_result["missing_modalities"],
+                "validation_summary": validation_summary,
+                "validation_errors": validation_result["validation_errors"]
+            }
         }
 
         print(f"[SUCCESS] ZIP extras cu succes: {len(extracted_files)} fișiere, {len(nifti_files)} NIfTI")
+        print(f"[VALIDATION] {validation_summary}")
+
         return result
 
     except zipfile.BadZipFile:
@@ -273,6 +287,9 @@ def list_files() -> List[Dict]:
                     if file.is_file():
                         total_size += file.stat().st_size
 
+                # Validează pentru segmentare
+                validation_result = validate_segmentation_files(folder_path)
+
                 stat = folder_path.stat()
                 items.append({
                     "name": folder_path.name,
@@ -283,7 +300,10 @@ def list_files() -> List[Dict]:
                     "path": str(folder_path.absolute()),
                     "files_count": len(total_files),
                     "nifti_count": len(nifti_files),
-                    "nifti_files": [f.name for f in nifti_files]
+                    "nifti_files": [f.name for f in nifti_files],
+                    "segmentation_ready": validation_result["is_valid"],
+                    "found_modalities": list(validation_result["found_modalities"].keys()),
+                    "missing_modalities": validation_result["missing_modalities"]
                 })
 
         # Sortează după data modificării

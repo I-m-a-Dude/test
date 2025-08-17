@@ -102,82 +102,41 @@ class MedNeXtWrapper:
             model_path = self.model_path
 
         try:
-            print(f"[ML] Incarca model din: {model_path}")
+            print(f"[ML] Încarcă model din: {model_path}")
 
             # Verifică dacă fișierul există
             if not model_path.exists():
-                raise FileNotFoundError(f"Modelul nu exista: {model_path}")
+                raise FileNotFoundError(f"Modelul nu există: {model_path}")
 
             # Creează modelul
             self.model = self._create_model()
 
-            # Încarcă checkpoint cu debugging detaliat
-            print(f"[ML] Citire checkpoint...")
+            # Încarcă state dict
             checkpoint = torch.load(model_path, map_location=self.device)
 
-            print(f"[ML] Checkpoint type: {type(checkpoint)}")
-
-            # Debug checkpoint structure
+            # Gestionează diferite formate de checkpoint
             if isinstance(checkpoint, dict):
-                print(f"[ML] Checkpoint keys: {list(checkpoint.keys())}")
-
-                # Verifică ce format de state_dict avem
                 if 'model_state_dict' in checkpoint:
                     state_dict = checkpoint['model_state_dict']
-                    print("[ML] Foloseste model_state_dict")
+                    print("[ML] Încărcat din checkpoint cu model_state_dict")
                 elif 'state_dict' in checkpoint:
                     state_dict = checkpoint['state_dict']
-                    print("[ML] Foloseste state_dict")
-                elif 'model' in checkpoint:
-                    state_dict = checkpoint['model']
-                    print("[ML] Foloseste model")
+                    print("[ML] Încărcat din checkpoint cu state_dict")
                 else:
-                    # Probabil este direct state_dict
                     state_dict = checkpoint
-                    print("[ML] Foloseste checkpoint direct ca state_dict")
+                    print("[ML] Încărcat direct din dicționar")
             else:
                 state_dict = checkpoint
-                print("[ML] Checkpoint nu este dict, foloseste direct")
+                print("[ML] Încărcat model direct")
 
-            # Verifică state_dict
-            if isinstance(state_dict, dict):
-                print(f"[ML] State dict keys count: {len(state_dict.keys())}")
-                print(f"[ML] Primele 5 keys: {list(state_dict.keys())[:5]}")
-            else:
-                print(f"[ML] ATENTIE: State dict nu este dict! Type: {type(state_dict)}")
-                raise ValueError("State dict nu este un dicționar valid")
-
-            # Verifică compatibilitatea key-urilor
-            model_keys = set(self.model.state_dict().keys())
-            checkpoint_keys = set(state_dict.keys())
-
-            missing_keys = model_keys - checkpoint_keys
-            unexpected_keys = checkpoint_keys - model_keys
-
-            if missing_keys:
-                print(f"[ML] ATENTIE: {len(missing_keys)} keys lipsesc din checkpoint")
-                print(f"[ML] Primele 5 missing: {list(missing_keys)[:5]}")
-
-            if unexpected_keys:
-                print(f"[ML] ATENTIE: {len(unexpected_keys)} keys neașteptate în checkpoint")
-                print(f"[ML] Primele 5 unexpected: {list(unexpected_keys)[:5]}")
-
-            # Încarcă weights în model cu strict=False pentru debugging
-            print(f"[ML] Incarcare state dict în model...")
-
-            # Încearcă mai întâi cu strict=False
-            missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
-
-            if missing_keys:
-                print(f"[ML] Missing keys la încărcare: {missing_keys}")
-            if unexpected_keys:
-                print(f"[ML] Unexpected keys la încărcare: {unexpected_keys}")
+            # Încarcă weights în model
+            self.model.load_state_dict(state_dict, strict=True)
 
             # Setează modelul în modul evaluare
             self.model.eval()
 
             self.is_loaded = True
-            print(f"[ML] Model incarcat cu succes!")
+            print(f"[ML] Model încărcat cu succes!")
 
             # Afișează informații despre checkpoint dacă sunt disponibile
             if isinstance(checkpoint, dict):
@@ -191,11 +150,8 @@ class MedNeXtWrapper:
             return True
 
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            logger.error(f"Eroare detaliata la incarcarea modelului:\n{error_details}")
-            print(f"[ML] EROARE la incarcarea modelului: {str(e)}")
-            print(f"[ML] Stack trace:\n{error_details}")
+            logger.error(f"Eroare la încărcarea modelului: {str(e)}")
+            print(f"[ML] EROARE la încărcarea modelului: {str(e)}")
             self.model = None
             self.is_loaded = False
             return False
@@ -289,19 +245,112 @@ class MedNeXtWrapper:
 
         return info
 
-    def unload_model(self) -> None:
-        """Descarcă modelul din memorie"""
-        if self.model is not None:
-            del self.model
-            self.model = None
+    def unload_model(self) -> bool:
+        """
+        Descarcă modelul din memorie și eliberează resursele
 
-        self.is_loaded = False
+        Returns:
+            True dacă descărcarea a reușit
+        """
+        try:
+            memory_before = 0
+            if torch.cuda.is_available():
+                memory_before = torch.cuda.memory_allocated() / 1024 ** 2
 
-        # Curăță cache-ul CUDA dacă e disponibil
+            if self.model is not None:
+                print("[ML] Descărcare model din memorie...")
+
+                # Mută modelul pe CPU înainte de ștergere (eliberează GPU memory)
+                if self.device.type == 'cuda':
+                    self.model.cpu()
+
+                # Șterge modelul
+                del self.model
+                self.model = None
+
+            self.is_loaded = False
+
+            # Curăță cache-ul CUDA complet
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+                memory_after = torch.cuda.memory_allocated() / 1024 ** 2
+                memory_freed = memory_before - memory_after
+
+                print(f"[ML] Model descărcat cu succes!")
+                print(f"    - Memorie GPU înainte: {memory_before:.1f}MB")
+                print(f"    - Memorie GPU după: {memory_after:.1f}MB")
+                print(f"    - Memorie eliberată: {memory_freed:.1f}MB")
+            else:
+                print("[ML] Model descărcat cu succes din memoria CPU!")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Eroare la descărcarea modelului: {str(e)}")
+            print(f"[ML] EROARE la descărcarea modelului: {str(e)}")
+            return False
+
+    def get_memory_usage(self) -> Dict[str, float]:
+        """
+        Returnează informații despre utilizarea memoriei
+
+        Returns:
+            Dict cu utilizarea memoriei în MB
+        """
+        memory_info = {
+            "cpu_model_loaded": self.is_loaded,
+            "gpu_available": torch.cuda.is_available()
+        }
+
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+            memory_info.update({
+                "gpu_allocated_mb": torch.cuda.memory_allocated() / 1024 ** 2,
+                "gpu_reserved_mb": torch.cuda.memory_reserved() / 1024 ** 2,
+                "gpu_total_mb": torch.cuda.get_device_properties(0).total_memory / 1024 ** 2,
+                "gpu_free_mb": (torch.cuda.get_device_properties(
+                    0).total_memory - torch.cuda.memory_reserved()) / 1024 ** 2
+            })
 
-        print("[ML] Model descărcat din memorie")
+        return memory_info
+
+    def force_cleanup(self) -> None:
+        """
+        Forțează cleanup complet al tuturor resurselor
+        """
+        print("[ML] Cleanup forțat al tuturor resurselor...")
+
+        try:
+            # Descarcă modelul
+            self.unload_model()
+
+            # Cleanup agresiv pentru CUDA
+            if torch.cuda.is_available():
+                for device_id in range(torch.cuda.device_count()):
+                    with torch.cuda.device(device_id):
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+
+                print("[ML] Cleanup CUDA complet")
+
+            # Reset variabile
+            self.model = None
+            self.is_loaded = False
+
+            print("[ML] Cleanup forțat completat")
+
+        except Exception as e:
+            print(f"[ML] Eroare la cleanup forțat: {str(e)}")
+
+    def __del__(self):
+        """Destructor - cleanup automat"""
+        try:
+            if hasattr(self, 'is_loaded') and self.is_loaded:
+                print("[ML] Destructor: cleanup automat model")
+                self.force_cleanup()
+        except:
+            pass  # Ignoră erorile în destructor
 
 
 # Instanță globală singleton
@@ -332,3 +381,40 @@ def ensure_model_loaded() -> bool:
     if not wrapper.is_loaded:
         return wrapper.load_model()
     return True
+
+
+def unload_global_model() -> bool:
+    """
+    Descarcă modelul global și eliberează memoria
+
+    Returns:
+        True dacă descărcarea a reușit
+    """
+    global _model_wrapper
+    if _model_wrapper is not None:
+        success = _model_wrapper.unload_model()
+        return success
+    return True
+
+
+def force_global_cleanup() -> None:
+    """
+    Forțează cleanup complet al tuturor resurselor globale
+    """
+    global _model_wrapper
+    if _model_wrapper is not None:
+        _model_wrapper.force_cleanup()
+        _model_wrapper = None
+
+    print("[ML] Cleanup global complet")
+
+
+def get_global_memory_usage() -> Dict:
+    """
+    Returnează utilizarea globală de memorie
+
+    Returns:
+        Dict cu informații despre memorie
+    """
+    wrapper = get_model_wrapper()
+    return wrapper.get_memory_usage()
