@@ -6,23 +6,26 @@ from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 import mimetypes
 
-from src.core.config import APP_NAME, VERSION, UPLOAD_DIR, get_file_size_mb, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
+from src.core.config import APP_NAME, VERSION, UPLOAD_DIR, get_file_size_mb, MAX_FILE_SIZE, ALLOWED_EXTENSIONS, TEMP_PREPROCESSING_DIR
 from src.utils.file_utils import validate_file, save_file, list_files, delete_file
 
-# Import ML pentru test endpoint
+# Import ML și Services pentru test endpoints
 try:
-    from src.ml import (
-        get_model_wrapper,
-        ensure_model_loaded,
-        unload_global_model,
-        force_global_cleanup,
-        get_global_memory_usage
-    )
+    from src.ml import get_model_wrapper, ensure_model_loaded
 
     ML_AVAILABLE = True
 except ImportError as e:
     print(f"[WARNING] ML dependencies nu sunt disponibile: {e}")
     ML_AVAILABLE = False
+
+try:
+    from src.services import get_preprocessor, preprocess_folder_simple
+    from src.utils.nifti_validation import find_valid_segmentation_folders
+
+    SERVICE_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Service dependencies nu sunt disponibile: {e}")
+    SERVICE_AVAILABLE = False
 
 # Router principal
 router = APIRouter()
@@ -238,13 +241,11 @@ async def load_model_endpoint():
         if success:
             wrapper = get_model_wrapper()
             model_info = wrapper.get_model_info()
-            memory_info = wrapper.get_memory_usage()
 
             print("[API] Model încărcat cu succes!")
             return {
                 "message": "Model încărcat cu succes",
-                "model_info": model_info,
-                "memory_usage": memory_info
+                "model_info": model_info
             }
         else:
             raise HTTPException(
@@ -260,118 +261,236 @@ async def load_model_endpoint():
         )
 
 
-@router.post("/ml/unload-model")
-async def unload_model_endpoint():
+@router.get("/preprocess/status")
+async def get_preprocess_status():
     """
-    Descarcă modelul ML din memorie și eliberează resursele
+    Verifică statusul sistemului de preprocesare
     """
-    if not ML_AVAILABLE:
+    if not SERVICE_AVAILABLE:
+        return {
+            "preprocess_available": False,
+            "error": "Dependențele pentru preprocesare nu sunt instalate",
+            "required_packages": ["monai", "torch", "nibabel"]
+        }
+
+    try:
+        preprocessor = get_preprocessor()
+        info = preprocessor.get_preprocessing_info()
+
+        return {
+            "preprocess_available": True,
+            "preprocessing_info": info,
+            "status": "ready" if info["is_initialized"] else "not_initialized"
+        }
+
+    except Exception as e:
+        return {
+            "preprocess_available": True,
+            "error": str(e),
+            "status": "error"
+        }
+
+
+@router.get("/preprocess/folders")
+async def get_valid_folders():
+    """
+    Găsește folderele valide pentru segmentare
+    """
+    if not SERVICE_AVAILABLE:
         raise HTTPException(
             status_code=503,
-            detail="Sistemul ML nu este disponibil"
+            detail="Sistemul de preprocesare nu este disponibil"
         )
 
     try:
-        print("[API] Încercare descărcare model...")
+        valid_folders = find_valid_segmentation_folders(UPLOAD_DIR)
 
-        # Obține informații despre memorie înainte
-        memory_before = get_global_memory_usage()
+        folders_info = []
+        for folder_path, validation_result in valid_folders:
+            folders_info.append({
+                "folder_name": folder_path.name,
+                "folder_path": str(folder_path),
+                "found_modalities": validation_result["found_modalities"],
+                "total_nifti_files": validation_result["total_nifti_files"]
+            })
 
-        # Descarcă modelul
-        success = unload_global_model()
+        return {
+            "valid_folders_count": len(folders_info),
+            "valid_folders": folders_info
+        }
 
-        if success:
-            # Obține informații despre memorie după
-            memory_after = get_global_memory_usage()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la căutarea folderelor: {str(e)}"
+        )
 
-            print("[API] Model descărcat cu succes!")
-            return {
-                "message": "Model descărcat cu succes",
-                "memory_before": memory_before,
-                "memory_after": memory_after,
-                "model_loaded": False
-            }
-        else:
+
+@router.post("/preprocess/folder/{folder_name}")
+async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
+    """
+    Preprocesează un folder specific pentru inferență și salvează datele
+    """
+    if not SERVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul de preprocesare nu este disponibil"
+        )
+
+    try:
+        folder_path = UPLOAD_DIR / folder_name
+
+        if not folder_path.exists() or not folder_path.is_dir():
             raise HTTPException(
-                status_code=500,
-                detail="Descărcarea modelului a eșuat"
+                status_code=404,
+                detail=f"Folderul {folder_name} nu există"
             )
 
+        print(f"[API] Încercare preprocesare folder: {folder_name}")
+
+        # Preprocesează folderul
+        result = preprocess_folder_simple(folder_path)
+
+        # Debug: afișează cheile disponibile
+        print(f"[DEBUG] Chei disponibile în result: {list(result.keys())}")
+
+        # Salvează datele preprocesate dacă e solicitat
+        saved_path = None
+        if save_data:
+            import torch
+
+            # Încearcă să găsească tensorul preprocesат sub diferite chei posibile
+            preprocessed_tensor = None
+            possible_keys = ["preprocessed_data", "data", "tensor", "processed_tensor", "output"]
+
+            for key in possible_keys:
+                if key in result:
+                    preprocessed_tensor = result[key]
+                    print(f"[DEBUG] Tensorul găsit sub cheia: {key}")
+                    break
+
+            if preprocessed_tensor is None:
+                # Dacă nu găsește tensorul, afișează toate valorile pentru debugging
+                print(f"[ERROR] Nu s-a găsit tensorul preprocesат. Result keys: {list(result.keys())}")
+                for key, value in result.items():
+                    print(f"[DEBUG] {key}: {type(value)} - {value if not hasattr(value, 'shape') else f'shape: {value.shape}'}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Tensorul preprocesат nu a fost găsit în rezultat"
+                )
+
+            # Creează directorul pentru date preprocesate
+            preprocessed_dir = TEMP_PREPROCESSING_DIR
+            preprocessed_dir.mkdir(exist_ok=True)
+
+            # Salvează tensorul
+            output_path = preprocessed_dir / f"{folder_name}_preprocessed.pt"
+            torch.save(preprocessed_tensor, output_path)
+            saved_path = str(output_path)
+
+            print(f"[API] Date preprocesate salvate în: {saved_path}")
+
+        # Extrage informații pentru răspuns (fără tensorul mare)
+        response_data = {
+            "message": f"Folder {folder_name} preprocesат cu succes",
+            "folder_name": result["folder_name"],
+            "processed_shape": result["processed_shape"],
+            "original_modalities": list(result["original_paths"].keys()),
+            "preprocessing_config": result["preprocessing_config"]
+        }
+
+        if saved_path:
+            response_data["saved_path"] = saved_path
+            response_data["saved_filename"] = f"{folder_name}_preprocessed.pt"
+
+        print(f"[API] Preprocesare completă pentru {folder_name}")
+        return response_data
+
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[API] Eroare la descărcarea modelului: {str(e)}")
+        print(f"[API] Eroare la preprocesarea folderului {folder_name}: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la descărcarea modelului: {str(e)}"
+            detail=f"Eroare la preprocesare: {str(e)}"
         )
 
-
-@router.post("/ml/force-cleanup")
-async def force_cleanup_endpoint():
+@router.get("/preprocess/saved")
+async def get_preprocessed_files():
     """
-    Forțează cleanup complet al tuturor resurselor ML
+    Listează fișierele preprocesate salvate
     """
-    if not ML_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Sistemul ML nu este disponibil"
-        )
-
     try:
-        print("[API] Cleanup forțat al resurselor ML...")
+        preprocessed_dir = TEMP_PREPROCESSING_DIR
 
-        # Obține informații despre memorie înainte
-        memory_before = get_global_memory_usage()
+        if not preprocessed_dir.exists():
+            return {
+                "preprocessed_files": [],
+                "count": 0,
+                "preprocessed_dir": str(preprocessed_dir)
+            }
 
-        # Cleanup forțat
-        force_global_cleanup()
+        files = []
+        for file_path in preprocessed_dir.glob("*.pt"):
+            stat = file_path.stat()
+            files.append({
+                "filename": file_path.name,
+                "size_mb": get_file_size_mb(stat.st_size),
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime
+            })
 
-        # Obține informații despre memorie după
-        memory_after = get_global_memory_usage()
-
-        print("[API] Cleanup forțat completat!")
         return {
-            "message": "Cleanup forțat completat cu succes",
-            "memory_before": memory_before,
-            "memory_after": memory_after,
-            "all_resources_cleared": True
+            "preprocessed_files": files,
+            "count": len(files),
+            "preprocessed_dir": str(preprocessed_dir)
         }
 
     except Exception as e:
-        print(f"[API] Eroare la cleanup forțat: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la cleanup forțat: {str(e)}"
+            detail=f"Eroare la listarea fișierelor preprocesate: {str(e)}"
         )
 
-
-@router.get("/ml/memory-usage")
-async def get_memory_usage():
+@router.get("/preprocess/load/{filename}")
+async def load_preprocessed_data(filename: str):
     """
-    Returnează informații despre utilizarea memoriei
+    Încarcă date preprocesate salvate
     """
-    if not ML_AVAILABLE:
+    if not SERVICE_AVAILABLE:
         raise HTTPException(
             status_code=503,
-            detail="Sistemul ML nu este disponibil"
+            detail="Sistemul de preprocesare nu este disponibil"
         )
 
     try:
-        memory_info = get_global_memory_usage()
-        wrapper = get_model_wrapper()
+        import torch
+
+        preprocessed_dir = TEMP_PREPROCESSING_DIR
+        file_path = preprocessed_dir / filename
+
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fișierul preprocesат {filename} nu există"
+            )
+
+        # Încarcă tensorul
+        data = torch.load(file_path)
 
         return {
-            "memory_usage": memory_info,
-            "model_loaded": wrapper.is_loaded,
-            "device": str(wrapper.device) if wrapper.device else "none"
+            "message": f"Date preprocesate încărcate cu succes",
+            "filename": filename,
+            "shape": list(data.shape),
+            "dtype": str(data.dtype),
+            "device": str(data.device)
         }
 
     except Exception as e:
-        print(f"[API] Eroare la citirea memoriei: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la citirea informațiilor despre memorie: {str(e)}"
+            detail=f"Eroare la încărcarea datelor: {str(e)}"
         )
-
 
 @router.get("/download/{filename}")
 async def download_file(filename: str):

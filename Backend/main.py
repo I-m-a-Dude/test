@@ -100,9 +100,9 @@ async def startup_event():
     print(f" CORS origini: {', '.join(CORS_ORIGINS)}")
 
     if ML_CLEANUP_AVAILABLE:
-        print("🧠 Sistem ML disponibil")
+        print(" Sistem ML disponibil")
     else:
-        print("⚠️  Sistem ML indisponibil")
+        print("  Sistem ML indisponibil")
 
     print("=" * 60)
 

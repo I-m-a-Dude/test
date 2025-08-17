@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Service package pentru MediView Backend
-Conține logica de business pentru preprocesare, inference și postprocesare
+Conține serviciile de preprocesare, postprocesare și inferență
 """
 
-from .preprocess import (
-    NIfTIPreprocessor,
-    get_preprocessor,
-    create_preprocessor,
-    get_nifti_files
-)
+from .preprocess import NIfTIPreprocessor, get_preprocessor, preprocess_folder_simple
 
 __all__ = [
     'NIfTIPreprocessor',
     'get_preprocessor',
-    'create_preprocessor',
-    'get_nifti_files'
+    'preprocess_folder_simple'
 ]

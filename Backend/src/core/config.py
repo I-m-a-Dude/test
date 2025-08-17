@@ -32,6 +32,7 @@ ALLOWED_EXTENSIONS = {'.nii', '.nii.gz', '.zip'}  # Adăugăm .zip
 MODELS_DIR = Path(os.getenv("MODELS_DIR", "model"))
 MODEL_PATH = MODELS_DIR / "ag_model.pth"
 TEMP_PROCESSING_DIR = Path("temp/processing")
+TEMP_PREPROCESSING_DIR = Path("temp/preprocess")
 TEMP_RESULTS_DIR = Path("temp/results")
 
 # Parametrii model MedNeXt
@@ -42,10 +43,18 @@ SPATIAL_DIMS = 3        # 3D segmentation
 KERNEL_SIZE = 3
 DEEP_SUPERVISION = False
 
-# Parametrii de preprocesare
-IMG_SIZE = (128, 128, 128)          # Dimensiune standard pentru model
-TARGET_SPACING = (1.0, 1.0, 1.0)   # Spacing standard în mm
-TARGET_ORIENTATION = "RAI"          # Right, Anterior, Inferior
+# Parametrii preprocesare
+IMG_SIZE = (128, 128, 128)  # Dimensiunea finală pentru model
+SPACING = (1.0, 1.0, 1.0)   # Voxel spacing standard
+ORIENTATION = "RAI"          # Right, Anterior, Inferior
+
+# Parametrii normalizare intensitate (pentru fiecare modalitate)
+INTENSITY_RANGES = {
+    "t1n": {"a_min": 0, "a_max": 3000, "b_min": 0.0, "b_max": 1.0},
+    "t1c": {"a_min": 0, "a_max": 3000, "b_min": 0.0, "b_max": 1.0},
+    "t2w": {"a_min": 0, "a_max": 3500, "b_min": 0.0, "b_max": 1.0},
+    "t2f": {"a_min": 0, "a_max": 3500, "b_min": 0.0, "b_max": 1.0}
+}
 
 # Creează directoarele dacă nu există
 UPLOAD_DIR.mkdir(exist_ok=True)
