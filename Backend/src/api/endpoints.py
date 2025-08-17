@@ -9,6 +9,15 @@ import mimetypes
 from src.core.config import APP_NAME, VERSION, UPLOAD_DIR, get_file_size_mb, MAX_FILE_SIZE, ALLOWED_EXTENSIONS
 from src.utils.file_utils import validate_file, save_file, list_files, delete_file
 
+# Import ML pentru test endpoint
+try:
+    from src.ml import get_model_wrapper, ensure_model_loaded
+
+    ML_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] ML dependencies nu sunt disponibile: {e}")
+    ML_AVAILABLE = False
+
 # Router principal
 router = APIRouter()
 
@@ -173,6 +182,149 @@ async def get_file_info(filename: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Eroare la citirea informațiilor: {str(e)}")
+
+
+@router.get("/ml/status")
+async def get_ml_status():
+    """
+    Verifică statusul sistemului ML
+    """
+    if not ML_AVAILABLE:
+        return {
+            "ml_available": False,
+            "error": "Dependențele ML nu sunt instalate",
+            "required_packages": ["torch", "monai", "nibabel"]
+        }
+
+    try:
+        wrapper = get_model_wrapper()
+        model_info = wrapper.get_model_info()
+
+        return {
+            "ml_available": True,
+            "model_info": model_info,
+            "status": "ready" if wrapper.is_loaded else "not_loaded"
+        }
+
+    except Exception as e:
+        return {
+            "ml_available": True,
+            "error": str(e),
+            "status": "error"
+        }
+
+
+@router.post("/ml/load-model")
+async def load_model_endpoint():
+    """
+    Încarcă modelul ML în memorie
+    """
+    if not ML_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul ML nu este disponibil"
+        )
+
+    try:
+        print("[API] Incercare incarcare model...")
+        success = ensure_model_loaded()
+
+        if success:
+            wrapper = get_model_wrapper()
+            model_info = wrapper.get_model_info()
+
+            print("[API] Model incarcat cu succes!")
+            return {
+                "message": "Model incarcat cu succes",
+                "model_info": model_info
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Incarcarea modelului a esuat"
+            )
+
+    except Exception as e:
+        print(f"[API] Eroare la incarcarea modelului: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la incarcarea modelului: {str(e)}"
+        )
+
+
+@router.get("/ml/inspect-model")
+async def inspect_model_file():
+    """
+    Inspectează fișierul modelului fără să îl încarce
+    """
+    if not ML_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul ML nu este disponibil"
+        )
+
+    try:
+        from src.core.config import MODEL_PATH
+        import torch
+
+        if not MODEL_PATH.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fișierul model nu există: {MODEL_PATH}"
+            )
+
+        print(f"[API] Inspectare model: {MODEL_PATH}")
+
+        # Încarcă checkpoint pentru inspecție
+        checkpoint = torch.load(MODEL_PATH, map_location='cpu')
+
+        inspection = {
+            "file_path": str(MODEL_PATH),
+            "file_size_mb": MODEL_PATH.stat().st_size / (1024 * 1024),
+            "checkpoint_type": str(type(checkpoint)),
+        }
+
+        if isinstance(checkpoint, dict):
+            inspection.update({
+                "is_dict": True,
+                "keys": list(checkpoint.keys()),
+                "keys_count": len(checkpoint.keys())
+            })
+
+            # Inspectează fiecare key
+            for key, value in checkpoint.items():
+                if isinstance(value, dict):
+                    inspection[f"{key}_info"] = {
+                        "type": "dict",
+                        "keys_count": len(value.keys()),
+                        "sample_keys": list(value.keys())[:5]
+                    }
+                elif hasattr(value, 'shape'):
+                    inspection[f"{key}_info"] = {
+                        "type": "tensor",
+                        "shape": list(value.shape)
+                    }
+                else:
+                    inspection[f"{key}_info"] = {
+                        "type": str(type(value)),
+                        "value": str(value)
+                    }
+        else:
+            inspection.update({
+                "is_dict": False,
+                "direct_type": str(type(checkpoint))
+            })
+
+        return inspection
+
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[API] Eroare la inspectarea modelului:\n{error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la inspectarea modelului: {str(e)}"
+        )
 
 
 @router.get("/download/{filename}")

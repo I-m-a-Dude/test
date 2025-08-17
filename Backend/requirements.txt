@@ -15,5 +15,6 @@ uvicorn
 pydantic
 # Adaugă această dependință pentru health monitoring:
 psutil
+pillow
 python-multipart
 python-decouple
