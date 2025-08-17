@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import { useToast } from '@/utils/hooks/use-toast';
@@ -11,7 +11,11 @@ import { uploadMriFile } from '@/utils/api';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
-export function MriUploader() {
+interface MriUploaderProps {
+  onOpenFileManager?: () => void;
+}
+
+export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   const setMriFile = useMriStore((state) => state.setFile);
   const mriFile = useMriStore((state) => state.file);
   const setAnalysisResult = useResultStore((state) => state.setAnalysisResult);
@@ -62,7 +66,10 @@ export function MriUploader() {
 
   const handleFile = async (selectedFile: File | undefined | null) => {
     if (selectedFile) {
-      if (selectedFile.name.endsWith('.nii') || selectedFile.name.endsWith('.nii.gz')) {
+      // Acceptă fișiere .nii, .nii.gz și .zip
+      if (selectedFile.name.endsWith('.nii') ||
+          selectedFile.name.endsWith('.nii.gz') ||
+          selectedFile.name.endsWith('.zip')) {
         setMriFile(selectedFile);
         setAnalysisResult(null, null);
 
@@ -76,7 +83,7 @@ export function MriUploader() {
       } else {
         toast({
           title: 'Tip de fișier invalid',
-          description: 'Te rog încarcă un fișier .nii sau .nii.gz.',
+          description: 'Te rog încarcă un fișier .nii, .nii.gz sau .zip.',
           variant: 'destructive',
         });
       }
@@ -129,6 +136,12 @@ export function MriUploader() {
     if (mriFile) {
       setIsNavigating(true);
       navigate(pages.analysis);
+    }
+  };
+
+  const handleOpenFileManager = () => {
+    if (onOpenFileManager) {
+      onOpenFileManager();
     }
   };
 
@@ -194,13 +207,28 @@ export function MriUploader() {
               <p className="text-muted-foreground text-sm mt-1">
                 Drag & drop sau click pentru a selecta un fișier
               </p>
-              <p className="text-xs text-muted-foreground mt-4">Doar fișiere .nii sau .nii.gz</p>
+              <p className="text-xs text-muted-foreground mt-4">Fișiere .nii, .nii.gz sau .zip</p>
+
+              {/* Buton pentru fișierele de pe server */}
+              {onOpenFileManager && (
+                <div className="mt-6">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenFileManager}
+                    className="flex items-center gap-2"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    Vezi fișierele de pe server
+                  </Button>
+                </div>
+              )}
             </div>
             <input
               id="file-upload"
               type="file"
               className="sr-only"
-              accept=".nii,.nii.gz"
+              accept=".nii,.nii.gz,.zip"
               onChange={(e) => handleFile(e.target.files?.[0])}
               disabled={uploadStatus === 'uploading'}
             />

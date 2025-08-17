@@ -7,9 +7,24 @@ export interface UploadResponse {
   file_info: {
     filename: string;
     size: number;
+    size_mb: string;
     content_type: string;
-    saved_path: string;
-    status: string;
+    type: 'single_file' | 'zip_extracted' | 'zip_failed';
+    path?: string;
+    extraction?: {
+      extracted_folder: string;
+      extracted_path: string;
+      total_files: number;
+      nifti_files_count: number;
+      nifti_files: string[];
+      all_files: Array<{
+        filename: string;
+        original_path: string;
+        size: number;
+        size_mb: string;
+      }>;
+    };
+    error?: string;
   };
 }
 
@@ -79,7 +94,23 @@ export const uploadMriFile = async (
 /**
  * Get list of uploaded files
  */
-export const getUploadedFiles = async (): Promise<{ files: Array<{ filename: string; size: number; modified: number }> }> => {
+export const getUploadedFiles = async (): Promise<{
+  items: Array<{
+    name: string;
+    type: 'file' | 'folder';
+    size: number;
+    size_mb: string;
+    modified: number;
+    path: string;
+    extension?: string;
+    files_count?: number;
+    nifti_count?: number;
+    nifti_files?: string[];
+  }>;
+  total_count: number;
+  files_count: number;
+  folders_count: number;
+}> => {
   const response = await fetch(`${API_BASE_URL}/files`);
   
   if (!response.ok) {

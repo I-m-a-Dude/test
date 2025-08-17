@@ -38,7 +38,7 @@ async def health_check():
 @router.post("/upload-mri")
 async def upload_mri_file(file: UploadFile = File(...)):
     """
-    Upload fișier MRI
+    Upload fișier MRI (inclusiv ZIP-uri cu fișiere NIfTI)
     """
     print(f"[INFO] Încercare upload: {file.filename}")
 
@@ -46,71 +46,106 @@ async def upload_mri_file(file: UploadFile = File(...)):
         # Validează fișierul
         validate_file(file)
 
-        # Salvează fișierul
+        # Salvează fișierul (și îl dezarhivează dacă e ZIP)
         file_info = await save_file(file)
 
-        print(f"[SUCCESS] Fisier salvat: {file.filename} ({file_info['size_mb']})")
+        if file_info.get("type") == "zip_extracted":
+            print(f"[SUCCESS] ZIP dezarhivat: {file.filename}")
+            print(f"[INFO] Extras în folderul: {file_info['extraction']['extracted_folder']}")
+            print(f"[INFO] Fișiere NIfTI găsite: {file_info['extraction']['nifti_files_count']}")
 
-        return JSONResponse(
-            status_code=200,
-            content={
-                "message": "Fisier incarcat cu succes",
-                "file_info": file_info
-            }
-        )
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "ZIP dezarhivat cu succes",
+                    "file_info": file_info
+                }
+            )
+
+        elif file_info.get("type") == "zip_failed":
+            print(f"[WARNING] ZIP salvat dar nu a putut fi dezarhivat: {file.filename}")
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "ZIP salvat dar dezarhivarea a eșuat",
+                    "file_info": file_info
+                }
+            )
+
+        else:
+            print(f"[SUCCESS] Fișier salvat: {file.filename} ({file_info['size_mb']})")
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "Fișier încărcat cu succes",
+                    "file_info": file_info
+                }
+            )
 
     except HTTPException:
         # Re-ridică excepțiile HTTP
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare neasteptata: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare interna: {str(e)}")
+        print(f"[ERROR] Eroare neașteptată: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
 
 
 @router.get("/files")
 async def get_uploaded_files():
     """
-    Listează fișierele încărcate
+    Listează fișierele și folderele încărcate
     """
     try:
-        files = list_files()
+        items = list_files()
 
-        print(f"[INFO] Listare fisiere: {len(files)} fisiere gasite")
+        files_count = len([item for item in items if item["type"] == "file"])
+        folders_count = len([item for item in items if item["type"] == "folder"])
+
+        print(f"[INFO] Listare: {files_count} fișiere, {folders_count} foldere")
 
         return {
-            "files": files,
-            "count": len(files),
+            "items": items,
+            "total_count": len(items),
+            "files_count": files_count,
+            "folders_count": folders_count,
             "upload_dir": str(UPLOAD_DIR.absolute())
         }
 
     except Exception as e:
-        print(f"[ERROR] Eroare la listarea fisierelor: {str(e)}")
+        print(f"[ERROR] Eroare la listarea fișierelor: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la listare: {str(e)}")
 
 
 @router.delete("/files/{filename}")
 async def delete_uploaded_file(filename: str):
     """
-    Șterge un fișier încărcat
+    Șterge un fișier sau folder încărcat
     """
-    print(f"[INFO] Incercare stergere: {filename}")
+    print(f"[INFO] Încercare ștergere: {filename}")
 
     try:
         result = delete_file(filename)
 
-        print(f"[SUCCESS] Fisier sters: {filename} ({result['size_mb']})")
+        if result["type"] == "file":
+            print(f"[SUCCESS] Fișier șters: {filename} ({result['size_mb']})")
+            message = f"Fișierul {filename} a fost șters cu succes"
+        else:
+            print(f"[SUCCESS] Folder șters: {filename} ({result['files_deleted']} fișiere, {result['size_mb']})")
+            message = f"Folderul {filename} a fost șters cu succes"
 
         return {
-            "message": f"Fisierul {filename} a fost sters cu succes",
-            "file_info": result
+            "message": message,
+            "deleted_item": result
         }
 
     except HTTPException:
         # Re-ridică excepțiile HTTP
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare neasteptata la stergere: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare interna: {str(e)}")
+        print(f"[ERROR] Eroare neașteptată la ștergere: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
 
 
 @router.get("/files/{filename}/info")
@@ -121,7 +156,7 @@ async def get_file_info(filename: str):
     file_path = UPLOAD_DIR / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fisierul nu exista")
+        raise HTTPException(status_code=404, detail="Fișierul nu există")
 
     try:
         stat = file_path.stat()
@@ -137,7 +172,7 @@ async def get_file_info(filename: str):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Eroare la citirea informatiilor: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la citirea informațiilor: {str(e)}")
 
 
 @router.get("/download/{filename}")
@@ -148,10 +183,10 @@ async def download_file(filename: str):
     file_path = UPLOAD_DIR / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fisierul nu exista")
+        raise HTTPException(status_code=404, detail="Fișierul nu există")
 
     try:
-        print(f"[INFO] Descarcare fisier: {filename}")
+        print(f"[INFO] Descărcare fișier: {filename}")
 
         # Detectează tipul MIME
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -165,8 +200,8 @@ async def download_file(filename: str):
         )
 
     except Exception as e:
-        print(f"[ERROR] Eroare la descarcarea fisierului {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la descarcare: {str(e)}")
+        print(f"[ERROR] Eroare la descărcarea fișierului {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")
 
 
 @router.get("/files/{filename}/download")
@@ -177,10 +212,10 @@ async def download_file_attachment(filename: str):
     file_path = UPLOAD_DIR / filename
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fisierul nu exista")
+        raise HTTPException(status_code=404, detail="Fișierul nu există")
 
     try:
-        print(f"[INFO] Descarcare attachment: {filename}")
+        print(f"[INFO] Descărcare attachment: {filename}")
 
         # Pentru fișiere .nii.gz setează tipul corect
         if filename.lower().endswith('.nii.gz'):
@@ -200,5 +235,5 @@ async def download_file_attachment(filename: str):
         )
 
     except Exception as e:
-        print(f"[ERROR] Eroare la descarcarea attachment {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la descarcare: {str(e)}")
+        print(f"[ERROR] Eroare la descărcarea attachment {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")

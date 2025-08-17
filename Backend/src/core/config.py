@@ -26,7 +26,7 @@ CORS_ORIGINS = [
 # Configurări upload
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(500 * 1024 * 1024)))  # 500MB
-ALLOWED_EXTENSIONS = {'.nii', '.nii.gz'}
+ALLOWED_EXTENSIONS = {'.nii', '.nii.gz', '.zip'}
 
 # Creează directorul dacă nu există
 UPLOAD_DIR.mkdir(exist_ok=True)
