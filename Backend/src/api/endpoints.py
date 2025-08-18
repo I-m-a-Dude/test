@@ -764,6 +764,352 @@ async def load_preprocessed_data(filename: str):
             detail=f"Eroare la încărcarea datelor: {str(e)}"
         )
 
+
+# -*- coding: utf-8 -*-
+"""
+API Endpoints pentru serviciul de inferență
+Adaugă acestea în endpoints.py
+"""
+
+# Adaugă la începutul fișierului endpoints.py, în secțiunea de import-uri:
+from pathlib import Path
+
+# Import servicii inferență (după celelalte import-uri services):
+try:
+    from src.services import (
+        get_inference_service,
+        run_inference_on_folder,
+        run_inference_on_preprocessed,
+        get_postprocessor
+    )
+
+    INFERENCE_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARNING] Inference dependencies nu sunt disponibile: {e}")
+    INFERENCE_AVAILABLE = False
+
+
+# Adaugă aceste endpoint-uri în router:
+
+@router.get("/inference/status")
+async def get_inference_status():
+    """
+    Verifică statusul sistemului de inferență
+    """
+    if not INFERENCE_AVAILABLE:
+        return {
+            "inference_available": False,
+            "error": "Dependențele pentru inferență nu sunt instalate",
+            "required_services": ["preprocess", "ml", "postprocess"]
+        }
+
+    try:
+        service = get_inference_service()
+
+        # Verifică toate componentele
+        preprocessor_info = service.preprocessor.get_preprocessing_info()
+        model_info = service.model_wrapper.get_model_info()
+        memory_info = service.model_wrapper.get_memory_usage()
+
+        return {
+            "inference_available": True,
+            "components": {
+                "preprocessor": {
+                    "initialized": preprocessor_info["is_initialized"],
+                    "monai_available": preprocessor_info["monai_available"]
+                },
+                "model": {
+                    "loaded": model_info["is_loaded"],
+                    "device": model_info["device"],
+                    "parameters": model_info.get("total_parameters", 0)
+                },
+                "postprocessor": {
+                    "initialized": True
+                }
+            },
+            "memory_usage": memory_info,
+            "status": "ready" if model_info["is_loaded"] else "model_not_loaded"
+        }
+
+    except Exception as e:
+        return {
+            "inference_available": True,
+            "error": str(e),
+            "status": "error"
+        }
+
+
+@router.post("/inference/folder/{folder_name}")
+async def run_inference_on_folder_endpoint(
+        folder_name: str,
+        save_result: bool = True,
+        output_filename: str = None
+):
+    """
+    Rulează inferența completă pe un folder cu modalități
+    Pipeline: preprocess -> inference -> postprocess -> save
+    """
+    if not INFERENCE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul de inferență nu este disponibil"
+        )
+
+    try:
+        folder_path = UPLOAD_DIR / folder_name
+
+        if not folder_path.exists() or not folder_path.is_dir():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Folderul {folder_name} nu există"
+            )
+
+        print(f"[INFERENCE API] Start pipeline pentru folder: {folder_name}")
+
+        # Rulează pipeline-ul complet
+        result = run_inference_on_folder(folder_path, save_result)
+
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Inferența a eșuat: {result.get('error', 'Eroare necunoscută')}"
+            )
+
+        # Pregătește răspunsul (fără array-ul mare)
+        response_data = {
+            "message": f"Inferență completă pentru {folder_name}",
+            "folder_name": result["folder_name"],
+            "timing": result["timing"],
+            "segmentation_info": {
+                "shape": list(result["segmentation"]["shape"]),
+                "classes_found": result["segmentation"]["classes_found"],
+                "class_counts": result["segmentation"]["class_counts"],
+                "total_segmented_voxels": result["segmentation"]["total_segmented_voxels"]
+            },
+            "saved_file": result["saved_path"],
+            "preprocessing_config": result["preprocessing_config"]
+        }
+
+        # Redenumește fișierul dacă este specificat
+        if save_result and result["saved_path"] and output_filename:
+            try:
+                old_path = Path(result["saved_path"])
+                new_path = old_path.parent / output_filename
+                old_path.rename(new_path)
+                response_data["saved_file"] = str(new_path)
+                print(f"[INFERENCE API] Fișier redenumit: {output_filename}")
+            except Exception as e:
+                print(f"[WARNING] Nu s-a putut redenumi fișierul: {e}")
+
+        print(f"[INFERENCE API] Inferență completă în {result['timing']['total_time']:.2f}s")
+        return response_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[INFERENCE API] Eroare neașteptată: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare internă la inferență: {str(e)}"
+        )
+
+
+@router.post("/inference/preprocessed/{filename}")
+async def run_inference_on_preprocessed_endpoint(filename: str):
+    """
+    Rulează inferența pe date preprocesate salvate
+    Pipeline: load -> inference -> postprocess
+    """
+    if not INFERENCE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul de inferență nu este disponibil"
+        )
+
+    try:
+        import torch
+
+        preprocessed_dir = TEMP_PREPROCESSING_DIR
+        file_path = preprocessed_dir / filename
+
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fișierul preprocesат {filename} nu există"
+            )
+
+        print(f"[INFERENCE API] Încarcă și procesează: {filename}")
+
+        # Încarcă tensorul preprocesат
+        data = torch.load(file_path, map_location='cpu')
+
+        if isinstance(data, dict) and 'image_tensor' in data:
+            preprocessed_tensor = data['image_tensor']
+            folder_name = data.get('metadata', {}).get('folder_name', filename.replace('.pt', ''))
+        else:
+            preprocessed_tensor = data
+            folder_name = filename.replace('.pt', '')
+
+        # Verifică shape-ul
+        expected_shape = (4, 128, 128, 128)  # (C, H, W, D)
+        if preprocessed_tensor.shape != expected_shape:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Shape tensor invalid: {preprocessed_tensor.shape}. Se așteaptă: {expected_shape}"
+            )
+
+        # Rulează inferența
+        result = run_inference_on_preprocessed(preprocessed_tensor, folder_name)
+
+        if not result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Inferența a eșuat: {result.get('error', 'Eroare necunoscută')}"
+            )
+
+        response_data = {
+            "message": f"Inferență completă pe date preprocesate",
+            "source_file": filename,
+            "folder_name": result["folder_name"],
+            "timing": result["timing"],
+            "segmentation_info": {
+                "shape": list(result["segmentation"]["shape"]),
+                "classes_found": result["segmentation"]["classes_found"],
+                "class_counts": result["segmentation"]["class_counts"]
+            }
+        }
+
+        print(f"[INFERENCE API] Inferență pe {filename} completă în {result['timing']['total_time']:.2f}s")
+        return response_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[INFERENCE API] Eroare la inferența pe preprocesate: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la inferență: {str(e)}"
+        )
+
+
+@router.get("/inference/results")
+async def get_inference_results():
+    """
+    Listează rezultatele de inferență salvate
+    """
+    try:
+        results_dir = Path("results")
+
+        if not results_dir.exists():
+            return {
+                "inference_results": [],
+                "count": 0,
+                "results_dir": str(results_dir)
+            }
+
+        results = []
+        # Caută fișiere cu pattern *-seg.nii.gz
+        for result_path in results_dir.glob("*-seg.nii.gz"):
+            stat = result_path.stat()
+
+            # Extrage numele folderului din nume fișier (elimină -seg.nii.gz)
+            folder_name = result_path.name.replace('-seg.nii.gz', '')
+
+            results.append({
+                "filename": result_path.name,
+                "folder_name": folder_name,
+                "full_path": str(result_path),
+                "size_mb": get_file_size_mb(stat.st_size),
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime
+            })
+
+        # Sortează după data creării
+        results.sort(key=lambda x: x["created"], reverse=True)
+
+        return {
+            "inference_results": results,
+            "count": len(results),
+            "results_dir": str(results_dir)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la listarea rezultatelor: {str(e)}"
+        )
+
+
+@router.get("/inference/results/{folder_name}/download")
+async def download_inference_result(folder_name: str):
+    """
+    Descarcă rezultatul de inferență pentru un folder
+    """
+    try:
+        result_path = Path("results") / f"{folder_name}-seg.nii.gz"
+
+        if not result_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Rezultatul pentru {folder_name} nu există"
+            )
+
+        print(f"[INFERENCE API] Descărcare rezultat: {folder_name}")
+
+        return FileResponse(
+            path=str(result_path),
+            media_type="application/gzip",
+            filename=f"{folder_name}-seg.nii.gz",
+            headers={"Content-Disposition": f"attachment; filename={folder_name}-seg.nii.gz"}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[INFERENCE API] Eroare la descărcarea rezultatului: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la descărcare: {str(e)}"
+        )
+
+
+@router.delete("/inference/results/{folder_name}")
+async def delete_inference_result(folder_name: str):
+    """
+    Șterge rezultatul de inferență pentru un folder
+    """
+    try:
+        result_path = Path("results") / f"{folder_name}-seg.nii.gz"
+
+        if not result_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Rezultatul pentru {folder_name} nu există"
+            )
+
+        file_size = result_path.stat().st_size
+        result_path.unlink()
+
+        print(f"[INFERENCE API] Rezultat șters: {folder_name}")
+
+        return {
+            "message": f"Rezultatul pentru {folder_name} a fost șters",
+            "deleted_file": result_path.name,
+            "size_freed_mb": get_file_size_mb(file_size)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[INFERENCE API] Eroare la ștergerea rezultatului: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la ștergere: {str(e)}"
+        )
+
+
+
+
 @router.get("/download/{filename}")
 async def download_file(filename: str):
     """

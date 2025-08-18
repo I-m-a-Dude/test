@@ -8,6 +8,9 @@ tmp/
 uploads/
 upload/
 
+results/
+outputs/
+
 # Python cache files
 __pycache__/
 *.py[cod]
