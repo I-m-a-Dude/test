@@ -16,7 +16,7 @@ from src.core.config import (
 )
 
 # Import endpoint-uri
-from src.api.endpoints import router
+from src.api import router
 
 # Import ML pentru cleanup
 try:

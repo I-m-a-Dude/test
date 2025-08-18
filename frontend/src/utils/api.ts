@@ -86,7 +86,7 @@ export const uploadMriFile = async (
 
     // Configure and send request
     xhr.timeout = 300000; // 5 minutes timeout
-    xhr.open('POST', `${API_BASE_URL}/upload-mri`);
+    xhr.open('POST', `${API_BASE_URL}/files/upload-mri`);
     xhr.send(formData);
   });
 };
@@ -111,13 +111,13 @@ export const getUploadedFiles = async (): Promise<{
   files_count: number;
   folders_count: number;
 }> => {
-  const response = await fetch(`${API_BASE_URL}/files`);
-  
+  const response = await fetch(`${API_BASE_URL}/files/`);
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'Eroare necunoscută' }));
     throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
   }
-  
+
   return response.json();
 };
 
@@ -128,12 +128,12 @@ export const deleteUploadedFile = async (filename: string): Promise<{ message: s
   const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}`, {
     method: 'DELETE'
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'Eroare necunoscută' }));
     throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
   }
-  
+
   return response.json();
 };
 
@@ -142,30 +142,30 @@ export const deleteUploadedFile = async (filename: string): Promise<{ message: s
  */
 export const downloadFile = async (filename: string): Promise<void> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/download/${encodeURIComponent(filename)}`);
-    
+    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/download`);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcare' }));
       throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
     }
-    
+
     // Obține blob-ul fișierului
     const blob = await response.blob();
-    
+
     // Creează un URL temporar pentru blob
     const url = window.URL.createObjectURL(blob);
-    
+
     // Creează un link temporar și declanșează descărcarea
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
-    
+
     // Curăță
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
-    
+
   } catch (error) {
     console.error('Eroare la descărcarea fișierului:', error);
     throw error;
@@ -177,30 +177,30 @@ export const downloadFile = async (filename: string): Promise<void> => {
  */
 export const downloadFileAttachment = async (filename: string): Promise<void> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/download`);
-    
+    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/download-attachment`);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcare' }));
       throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
     }
-    
+
     // Obține blob-ul fișierului
     const blob = await response.blob();
-    
+
     // Creează un URL temporar pentru blob
     const url = window.URL.createObjectURL(blob);
-    
+
     // Creează un link temporar și declanșează descărcarea
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
-    
+
     // Curăță
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
-    
+
   } catch (error) {
     console.error('Eroare la descărcarea attachment:', error);
     throw error;
@@ -220,12 +220,12 @@ export const getFileInfo = async (filename: string): Promise<{
   extension: string;
 }> => {
   const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/info`);
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'Eroare necunoscută' }));
     throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
   }
-  
+
   return response.json();
 };
 
@@ -233,7 +233,7 @@ export const loadFileForViewing = async (filename: string): Promise<File> => {
   try {
     console.log(`[API] Încarcă fișierul pentru vizualizare: ${filename}`);
 
-    const response = await fetch(`${API_BASE_URL}/download/${encodeURIComponent(filename)}`);
+    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/download`);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: 'Eroare la încărcare' }));
