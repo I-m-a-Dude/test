@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle, Eye } from 'lucide-react';
+import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle, Eye, FolderOpen, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/utils/hooks/use-toast';
 import { useMriStore } from '@/utils/stores/mri-store';
-import { getUploadedFiles, downloadFileAttachment, deleteUploadedFile } from '@/utils/api';
+import { getUploadedFiles, downloadFileAttachment, deleteUploadedFile, loadFileForViewing } from '@/utils/api';
+import { cn } from '@/utils/cn';
 
 interface FileItem {
   name: string;
@@ -29,7 +32,7 @@ interface FilesResponse {
 }
 
 interface FileManagerProps {
-  onFileLoaded?: () => void; // Callback pentru când un fișier e încărcat în viewer
+  onFileLoaded?: () => void;
 }
 
 export function FileManager({ onFileLoaded }: FileManagerProps) {
@@ -39,8 +42,52 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [loadingInViewer, setLoadingInViewer] = useState<string | null>(null);
 
+  // States pentru folder selection
+  const [showFolderSelection, setShowFolderSelection] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
+  const [selectedNiftiFile, setSelectedNiftiFile] = useState<string | null>(null);
+  const [isLoadingSelectedFile, setIsLoadingSelectedFile] = useState(false);
+
   const { toast } = useToast();
-  const { loadFileFromBackend, setLastKnownBackendFile } = useMriStore();
+  const { setFile, setLastKnownBackendFile } = useMriStore();
+
+  const getMriModalityInfo = (filename: string) => {
+    const lower = filename.toLowerCase();
+
+    if (lower.includes('t1') && (lower.includes('gd') || lower.includes('c') || lower.includes('contrast'))) {
+      return {
+        type: 'T1C',
+        label: 'T1 with Contrast',
+        color: 'bg-red-100 text-red-800 border-red-200'
+      };
+    } else if (lower.includes('t1')) {
+      return {
+        type: 'T1N',
+        label: 'T1 Native',
+        color: 'bg-blue-100 text-blue-800 border-blue-200'
+      };
+    } else if (lower.includes('t2') && lower.includes('flair') || lower.includes('f')) {
+      return {
+        type: 'T2F',
+        label: 'T2 FLAIR',
+        color: 'bg-purple-100 text-purple-800 border-purple-200'
+      };
+    } else if (lower.includes('t2')) {
+      return {
+        type: 'T2W',
+        label: 'T2 Weighted',
+        color: 'bg-green-100 text-green-800 border-green-200'
+      };
+    }
+
+    return {
+      type: 'OTHER',
+      label: 'Other MRI',
+      description: 'Secvență MRI - tip nedetectat automat',
+      color: 'bg-gray-100 text-gray-800 border-gray-200',
+      icon: '⚪'
+    };
+  };
 
   const loadFiles = async () => {
     setLoading(true);
@@ -91,7 +138,6 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   };
 
   const handleLoadInViewer = async (itemName: string) => {
-    // Verifică dacă este un fișier NIfTI valid
     const item = items.find(i => i.name === itemName);
     if (!item || item.type !== 'file' || !item.name.match(/\.nii(\.gz)?$/)) {
       toast({
@@ -105,7 +151,8 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
 
     setLoadingInViewer(itemName);
     try {
-      await loadFileFromBackend(itemName);
+      const file = await loadFileForViewing(itemName);
+      setFile(file);
       setLastKnownBackendFile(itemName);
 
       toast({
@@ -114,7 +161,6 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
         duration: 3000,
       });
 
-      // Notifică părintele că fișierul a fost încărcat
       if (onFileLoaded) {
         onFileLoaded();
       }
@@ -128,6 +174,56 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
       });
     } finally {
       setLoadingInViewer(null);
+    }
+  };
+
+  const handleUseFolderClick = (folder: FileItem) => {
+    if (folder.type !== 'folder' || !folder.nifti_files || folder.nifti_files.length <= 1) {
+      toast({
+        title: 'Folder invalid',
+        description: 'Folderul trebuie să conțină cel puțin 2 fișiere NIfTI.',
+        variant: 'destructive',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setSelectedFolder(folder);
+    setShowFolderSelection(true);
+  };
+
+  const handleNiftiFileSelection = async (filename: string) => {
+    setIsLoadingSelectedFile(true);
+    setSelectedNiftiFile(filename);
+
+    try {
+      const loadedFile = await loadFileForViewing(filename);
+
+      setFile(loadedFile);
+      setLastKnownBackendFile(filename);
+
+      toast({
+        title: 'Fișier selectat cu succes!',
+        description: `${filename} a fost încărcat și este gata pentru analiză.`,
+      });
+
+      // Închide selecția și notifică părinte
+      setShowFolderSelection(false);
+      setSelectedFolder(null);
+
+      if (onFileLoaded) {
+        onFileLoaded();
+      }
+
+    } catch (error) {
+      console.error('Error loading selected file:', error);
+      toast({
+        title: 'Eroare la încărcarea fișierului',
+        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul selectat.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSelectedFile(false);
     }
   };
 
@@ -214,10 +310,99 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     return item.type === 'file' && item.name.match(/\.nii(\.gz)?$/);
   };
 
+  const canUseFolder = (item: FileItem) => {
+    return item.type === 'folder' && item.nifti_count && item.nifti_count > 1;
+  };
+
   useEffect(() => {
     loadFiles();
   }, []);
 
+  // Folder selection modal
+  if (showFolderSelection && selectedFolder) {
+    return (
+      <div className="w-full">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-6 w-6 text-primary" />
+              Selectează Modalitatea MRI din {selectedFolder.name}
+            </CardTitle>
+            <CardDescription>
+              Folderul conține {selectedFolder.nifti_count} fișiere NIfTI.
+              Alege modalitatea pe care dorești să o vizualizezi.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {selectedFolder.nifti_files?.map((filename) => {
+                const modalityInfo = getMriModalityInfo(filename);
+                const isSelected = selectedNiftiFile === filename;
+                const isLoading = isLoadingSelectedFile && isSelected;
+
+                return (
+                  <div
+                    key={filename}
+                    className={cn(
+                      "flex items-center justify-between p-4 border rounded-lg transition-all cursor-pointer hover:bg-accent/50",
+                      isSelected && "ring-2 ring-primary bg-accent/30"
+                    )}
+                    onClick={() => !isLoading && handleNiftiFileSelection(filename)}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="text-2xl">{modalityInfo.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium truncate">{filename}</h4>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-xs", modalityInfo.color)}
+                          >
+                            {modalityInfo.type}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {modalityInfo.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          Se încarcă...
+                        </div>
+                      ) : (
+                        <Button variant="outline" size="sm">
+                          <Eye className="h-4 w-4 mr-1" />
+                          Selectează
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowFolderSelection(false);
+                  setSelectedFolder(null);
+                }}
+                disabled={isLoadingSelectedFile}
+              >
+                Anulează
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Main file manager view
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-6">
@@ -278,6 +463,20 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Buton pentru folder usage */}
+                {canUseFolder(item) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUseFolderClick(item)}
+                    disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
+                    className="flex items-center gap-1"
+                  >
+                    <FolderOpen className="h-3 w-3" />
+                    Folosește Folder
+                  </Button>
+                )}
+
                 {/* Buton pentru încărcarea în viewer - doar pentru fișiere NIfTI */}
                 {canLoadInViewer(item) && (
                   <Button

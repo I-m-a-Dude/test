@@ -5,11 +5,53 @@ API Endpoints pentru operațiile cu fișiere
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 import mimetypes
+from pathlib import Path
 
 from src.core.config import UPLOAD_DIR, get_file_size_mb
 from src.utils.file_utils import validate_file, save_file, list_files, delete_file
 
 router = APIRouter(prefix="/files", tags=["Files"])
+
+
+def resolve_file_path(filename: str) -> Path:
+    """
+    Rezolvă calea către un fișier, acceptând și fișiere din subfoldere
+
+    Args:
+        filename: Numele fișierului sau path relativ (ex: "folder/file.nii.gz")
+
+    Returns:
+        Path către fișier
+
+    Raises:
+        HTTPException: Dacă fișierul nu există sau calea este nesigură
+    """
+    try:
+        # Construiește calea și verifică că nu iese din UPLOAD_DIR (securitate)
+        file_path = UPLOAD_DIR / filename
+        file_path = file_path.resolve()
+
+        # Verifică că fișierul este într-adevăr în UPLOAD_DIR sau subfolderele sale
+        if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
+            raise HTTPException(status_code=400, detail="Calea către fișier nu este permisă")
+
+        # Verifică că fișierul există
+        if not file_path.exists():
+            # Încearcă să îl găsească în subfoldere dacă nu e găsit direct
+            possible_paths = list(UPLOAD_DIR.rglob(Path(filename).name))
+            if possible_paths:
+                print(f"[INFO] Fișier găsit în subfolder: {possible_paths[0]}")
+                return possible_paths[0]
+            else:
+                raise HTTPException(status_code=404, detail="Fișierul nu există")
+
+        return file_path
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Eroare la rezolvarea căii pentru {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la procesarea căii: {str(e)}")
 
 
 @router.post("/upload-mri")
@@ -95,10 +137,11 @@ async def get_uploaded_files():
         raise HTTPException(status_code=500, detail=f"Eroare la listare: {str(e)}")
 
 
-@router.delete("/{filename}")
+@router.delete("/{filename:path}")
 async def delete_uploaded_file(filename: str):
     """
     Șterge un fișier sau folder încărcat
+    Acceptă și paths către fișiere din subfoldere
     """
     print(f"[INFO] Încercare ștergere: {filename}")
 
@@ -125,21 +168,20 @@ async def delete_uploaded_file(filename: str):
         raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
 
 
-@router.get("/{filename}/info")
+@router.get("/{filename:path}/info")
 async def get_file_info(filename: str):
     """
     Obține informații despre un fișier specific
+    Acceptă și paths către fișiere din subfoldere
     """
-    file_path = UPLOAD_DIR / filename
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fișierul nu există")
-
     try:
+        file_path = resolve_file_path(filename)
+
         stat = file_path.stat()
 
         return {
             "filename": filename,
+            "actual_path": str(file_path.relative_to(UPLOAD_DIR)),
             "size": stat.st_size,
             "size_mb": get_file_size_mb(stat.st_size),
             "modified": stat.st_mtime,
@@ -148,22 +190,24 @@ async def get_file_info(filename: str):
             "extension": file_path.suffix
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[ERROR] Eroare la citirea informațiilor pentru {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la citirea informațiilor: {str(e)}")
 
 
-@router.get("/{filename}/download")
+@router.get("/{filename:path}/download")
 async def download_file(filename: str):
     """
     Descarcă un fișier (returnează fișierul direct în browser)
+    Acceptă și paths către fișiere din subfoldere
     """
-    file_path = UPLOAD_DIR / filename
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fișierul nu există")
-
     try:
-        print(f"[INFO] Descărcare fișier: {filename}")
+        file_path = resolve_file_path(filename)
+        actual_filename = file_path.name
+
+        print(f"[INFO] Descărcare fișier: {filename} -> {file_path}")
 
         # Detectează tipul MIME
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -173,31 +217,32 @@ async def download_file(filename: str):
         return FileResponse(
             path=str(file_path),
             media_type=mime_type,
-            filename=filename
+            filename=actual_filename
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] Eroare la descărcarea fișierului {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")
 
 
-@router.get("/{filename}/download-attachment")
+@router.get("/{filename:path}/download-attachment")
 async def download_file_attachment(filename: str):
     """
     Descarcă un fișier ca attachment (forțează salvarea)
+    Acceptă și paths către fișiere din subfoldere
     """
-    file_path = UPLOAD_DIR / filename
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fișierul nu există")
-
     try:
-        print(f"[INFO] Descărcare attachment: {filename}")
+        file_path = resolve_file_path(filename)
+        actual_filename = file_path.name
+
+        print(f"[INFO] Descărcare attachment: {filename} -> {file_path}")
 
         # Pentru fișiere .nii.gz setează tipul corect
-        if filename.lower().endswith('.nii.gz'):
+        if actual_filename.lower().endswith('.nii.gz'):
             media_type = "application/gzip"
-        elif filename.lower().endswith('.nii'):
+        elif actual_filename.lower().endswith('.nii'):
             media_type = "application/octet-stream"
         else:
             media_type, _ = mimetypes.guess_type(str(file_path))
@@ -207,10 +252,51 @@ async def download_file_attachment(filename: str):
         return FileResponse(
             path=str(file_path),
             media_type=media_type,
-            filename=filename,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            filename=actual_filename,
+            headers={"Content-Disposition": f"attachment; filename={actual_filename}"}
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] Eroare la descărcarea attachment {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")
+
+
+@router.get("/folder/{folder_name}/files")
+async def get_folder_files(folder_name: str):
+    """
+    Listează fișierele dintr-un folder specific
+    """
+    try:
+        folder_path = UPLOAD_DIR / folder_name
+
+        if not folder_path.exists() or not folder_path.is_dir():
+            raise HTTPException(status_code=404, detail=f"Folderul {folder_name} nu există")
+
+        files = []
+        for file_path in folder_path.iterdir():
+            if file_path.is_file():
+                stat = file_path.stat()
+                files.append({
+                    "name": file_path.name,
+                    "relative_path": f"{folder_name}/{file_path.name}",
+                    "size": stat.st_size,
+                    "size_mb": get_file_size_mb(stat.st_size),
+                    "modified": stat.st_mtime,
+                    "extension": file_path.suffix,
+                    "is_nifti": file_path.name.endswith('.nii') or file_path.name.endswith('.nii.gz')
+                })
+
+        return {
+            "folder_name": folder_name,
+            "files": files,
+            "files_count": len(files),
+            "nifti_count": len([f for f in files if f["is_nifti"]])
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Eroare la listarea fișierelor din folder {folder_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la listarea folderului: {str(e)}")

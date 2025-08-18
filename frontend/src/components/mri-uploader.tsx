@@ -1,15 +1,17 @@
 import { useState, type DragEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle, FolderOpen, Download } from 'lucide-react';
+import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle, FolderOpen, Download, Brain, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/utils/cn';
 import { useToast } from '@/utils/hooks/use-toast';
 import { useMriStore } from '@/utils/stores/mri-store';
 import { pages } from '@/utils/pages';
 import { useResultStore } from '@/utils/stores/result-store';
-import { uploadMriFile } from '@/utils/api';
+import { uploadMriFile, loadFileForViewing, type UploadResponse } from '@/utils/api';
 
-type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error' | 'file_selection';
 
 interface MriUploaderProps {
   onOpenFileManager?: () => void;
@@ -31,6 +33,9 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResponse, setUploadResponse] = useState<UploadResponse | null>(null);
+  const [selectedNiftiFile, setSelectedNiftiFile] = useState<string | null>(null);
+  const [isLoadingSelectedFile, setIsLoadingSelectedFile] = useState(false);
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -50,9 +55,48 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     attemptRestore();
   }, [file, isLoadingFromBackend, restoreFromBackend]);
 
+  const getMriModalityInfo = (filename: string) => {
+    const lower = filename.toLowerCase();
+
+    if (lower.includes('t1') && (lower.includes('gd') || lower.includes('c') || lower.includes('contrast'))) {
+      return {
+        type: 'T1C',
+        label: 'T1 with Contrast',
+        color: 'bg-red-100 text-red-800 border-red-200'
+      };
+    } else if (lower.includes('t1')) {
+      return {
+        type: 'T1N',
+        label: 'T1 Native',
+        color: 'bg-blue-100 text-blue-800 border-blue-200'
+      };
+    } else if (lower.includes('t2') && lower.includes('flair') || lower.includes('f')) {
+      return {
+        type: 'T2F',
+        label: 'T2 FLAIR',
+        color: 'bg-purple-100 text-purple-800 border-purple-200'
+      };
+    } else if (lower.includes('t2')) {
+      return {
+        type: 'T2W',
+        label: 'T2 Weighted',
+        color: 'bg-green-100 text-green-800 border-green-200'
+      };
+    }
+
+    return {
+      type: 'OTHER',
+      label: 'Other MRI',
+      description: 'Secvență MRI - tip nedetectat automat',
+      color: 'bg-gray-100 text-gray-800 border-gray-200',
+      icon: '⚪'
+    };
+  };
+
   const handleFileUpload = async (file: File) => {
     setUploadStatus('uploading');
     setUploadProgress(0);
+    setUploadResponse(null);
 
     try {
       const response = await uploadMriFile(
@@ -61,16 +105,30 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
       );
 
       console.log('✅ Upload reușit:', response);
-      setUploadStatus('success');
-      setUploadProgress(100);
+      setUploadResponse(response);
 
-      // IMPORTANT: Salvează referința la fișierul de pe backend
-      setLastKnownBackendFile(file.name);
+      // Verifică dacă este ZIP cu multiple fișiere NIfTI
+      if (response.file_info.type === 'zip_extracted' &&
+          response.file_info.extraction &&
+          response.file_info.extraction.nifti_files_count > 1) {
 
-      toast({
-        title: 'Upload reușit!',
-        description: `Fișierul ${file.name} a fost trimis către server.`,
-      });
+        setUploadStatus('file_selection');
+        toast({
+          title: 'ZIP extractat cu succes!',
+          description: `Au fost găsite ${response.file_info.extraction.nifti_files_count} fișiere NIfTI. Alege unul pentru vizualizare.`,
+        });
+
+      } else {
+        // Flux normal pentru fișiere individuale
+        setUploadStatus('success');
+        setUploadProgress(100);
+        setLastKnownBackendFile(file.name);
+
+        toast({
+          title: 'Upload reușit!',
+          description: `Fișierul ${file.name} a fost trimis către server.`,
+        });
+      }
 
       return response;
 
@@ -108,6 +166,39 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
           variant: 'destructive',
         });
       }
+    }
+  };
+
+  const handleNiftiFileSelection = async (filename: string) => {
+    setIsLoadingSelectedFile(true);
+    setSelectedNiftiFile(filename);
+
+    try {
+      // Încarcă fișierul selectat din backend
+      const loadedFile = await loadFileForViewing(filename);
+
+      // Actualizează store-ul
+      setFile(loadedFile);
+      setLastKnownBackendFile(filename);
+      setAnalysisResult(null, null);
+
+      toast({
+        title: 'Fișier selectat cu succes!',
+        description: `${filename} a fost încărcat și este gata pentru analiză.`,
+      });
+
+      // Reset upload status to success
+      setUploadStatus('success');
+
+    } catch (error) {
+      console.error('Error loading selected file:', error);
+      toast({
+        title: 'Eroare la încărcarea fișierului',
+        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul selectat.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSelectedFile(false);
     }
   };
 
@@ -173,6 +264,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     setAnalysisResult(null, null);
     setUploadStatus('idle');
     setUploadProgress(0);
+    setUploadResponse(null);
+    setSelectedNiftiFile(null);
   };
 
   const handleNavigateToAnalysis = () => {
@@ -200,6 +293,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       case 'error':
         return <AlertCircle className="h-5 w-5 text-red-500" />;
+      case 'file_selection':
+        return <Brain className="h-5 w-5 text-purple-500" />;
       default:
         return null;
     }
@@ -217,6 +312,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
         return 'Încărcat cu succes';
       case 'error':
         return 'Eroare la încărcare';
+      case 'file_selection':
+        return 'Selectează fișierul pentru vizualizare';
       default:
         return '';
     }
@@ -241,6 +338,91 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     );
   }
 
+  // File selection stage pentru ZIP-uri cu multiple fișiere NIfTI
+  if (uploadStatus === 'file_selection' && uploadResponse?.file_info.extraction) {
+    const extraction = uploadResponse.file_info.extraction;
+
+    return (
+      <div className="w-full">
+        <Card className="w-full max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-6 w-6 text-primary" />
+              Selectează Modalitatea MRI
+            </CardTitle>
+            <CardDescription>
+              Au fost găsite {extraction.nifti_files_count} fișiere NIfTI în arhiva ZIP.
+              Alege modalitatea pe care dorești să o vizualizezi.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {extraction.nifti_files.map((filename) => {
+                const modalityInfo = getMriModalityInfo(filename);
+                const isSelected = selectedNiftiFile === filename;
+                const isLoading = isLoadingSelectedFile && isSelected;
+
+                return (
+                  <div
+                    key={filename}
+                    className={cn(
+                      "flex items-center justify-between p-4 border rounded-lg transition-all cursor-pointer hover:bg-accent/50",
+                      isSelected && "ring-2 ring-primary bg-accent/30"
+                    )}
+                    onClick={() => !isLoading && handleNiftiFileSelection(filename)}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="text-2xl">{modalityInfo.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium truncate">{filename}</h4>
+                          <Badge
+                            variant="outline"
+                            className={cn("text-xs", modalityInfo.color)}
+                          >
+                            {modalityInfo.type}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {modalityInfo.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Se încarcă...
+                        </div>
+                      ) : (
+                        <Button variant="outline" size="sm">
+                          <Eye className="h-4 w-4 mr-1" />
+                          Selectează
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={handleRemoveFile}
+                disabled={isLoadingSelectedFile}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Anulează și încarcă alt fișier
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Upload interface standard
   return (
     <div className="w-full">
       {!file ? (
@@ -279,7 +461,6 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
               </p>
               <p className="text-xs text-muted-foreground mt-4">Fișiere .nii, .nii.gz sau .zip</p>
 
-              {/* Opțiuni pentru fișierele existente */}
               <div className="mt-6 flex flex-col gap-2">
                 {onOpenFileManager && (
                   <Button
@@ -293,7 +474,6 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                   </Button>
                 )}
 
-                {/* Opțiune rapidă pentru ultimul fișier cunoscut */}
                 {lastKnownBackendFile && (
                   <Button
                     variant="outline"
@@ -337,7 +517,6 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
             </div>
           </div>
 
-          {/* Status upload/loading */}
           {(uploadStatus !== 'idle' || isLoadingFromBackend) && (
             <div className="w-full max-w-md">
               <div className="flex items-center justify-between text-sm mb-2">
