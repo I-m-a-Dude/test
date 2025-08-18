@@ -27,6 +27,18 @@ except ImportError as e:
     print(f"[WARNING] Service dependencies nu sunt disponibile: {e}")
     SERVICE_AVAILABLE = False
 
+# Adaugă aceste import-uri la începutul fișierului
+import base64
+import io
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Backend non-interactive pentru server
+    import matplotlib.pyplot as plt
+    import numpy as np
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
 # Router principal
 router = APIRouter()
 
@@ -361,7 +373,8 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
 
             # Încearcă să găsească tensorul preprocesат sub diferite chei posibile
             preprocessed_tensor = None
-            possible_keys = ["preprocessed_data", "data", "tensor", "processed_tensor", "output"]
+            # FIXED: Added "image_tensor" to the possible keys
+            possible_keys = ["image_tensor", "preprocessed_data", "data", "tensor", "processed_tensor", "output"]
 
             for key in possible_keys:
                 if key in result:
@@ -378,6 +391,12 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
                     status_code=500,
                     detail="Tensorul preprocesат nu a fost găsit în rezultat"
                 )
+
+            # Convert MetaTensor to regular tensor if needed
+            if hasattr(preprocessed_tensor, 'as_tensor'):
+                preprocessed_tensor = preprocessed_tensor.as_tensor()
+            elif not isinstance(preprocessed_tensor, torch.Tensor):
+                preprocessed_tensor = torch.tensor(preprocessed_tensor)
 
             # Creează directorul pentru date preprocesate
             preprocessed_dir = TEMP_PREPROCESSING_DIR
@@ -414,6 +433,259 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
             status_code=500,
             detail=f"Eroare la preprocesare: {str(e)}"
         )
+
+
+# Adaugă acest endpoint în routerul tău
+@router.get("/preprocess/visualize/{filename}")
+async def visualize_preprocessed_data(filename: str,
+                                      slice_axis: str = "axial",
+                                      slice_index: int = None,
+                                      modality: str = "all"):
+    """
+    Vizualizează datele preprocesate salvate
+
+    Args:
+        filename: Numele fișierului .pt
+        slice_axis: Axa pentru slice ("axial", "coronal", "sagital")
+        slice_index: Indexul slice-ului (None pentru mijloc)
+        modality: Modalitatea de vizualizat ("all", "t1n", "t1c", "t2w", "t2f")
+    """
+    if not SERVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul de preprocesare nu este disponibil"
+        )
+
+    if not MATPLOTLIB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Matplotlib nu este disponibil pentru vizualizare"
+        )
+
+    try:
+        import torch
+
+        preprocessed_dir = TEMP_PREPROCESSING_DIR
+        file_path = preprocessed_dir / filename
+
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fișierul preprocesат {filename} nu există"
+            )
+
+        print(f"[VISUALIZE] Încarcă și vizualizează: {filename}")
+
+        # Încarcă tensorul
+        data = torch.load(file_path, map_location='cpu')
+
+        if isinstance(data, dict) and 'image_tensor' in data:
+            tensor = data['image_tensor']
+            metadata = data.get('metadata', {})
+        else:
+            tensor = data
+            metadata = {}
+
+        # Convertește la numpy pentru matplotlib
+        if hasattr(tensor, 'numpy'):
+            array = tensor.numpy()
+        else:
+            array = np.array(tensor)
+
+        print(f"[VISUALIZE] Shape tensor: {array.shape}")
+
+        # Verifică dimensiunile [4, H, W, D]
+        if len(array.shape) != 4 or array.shape[0] != 4:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format tensor neașteptat: {array.shape}. Se așteaptă [4, H, W, D]"
+            )
+
+        channels, height, width, depth = array.shape
+        modality_names = ["t1n", "t1c", "t2w", "t2f"]
+
+        # Determină indexul slice-ului
+        axis_mapping = {
+            "axial": 2,  # slice pe axa Z (depth)
+            "coronal": 1,  # slice pe axa Y (height)
+            "sagital": 0  # slice pe axa X (width)
+        }
+
+        if slice_axis not in axis_mapping:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Axă invalidă: {slice_axis}. Opțiuni: {list(axis_mapping.keys())}"
+            )
+
+        axis_idx = axis_mapping[slice_axis]
+        max_slice = array.shape[axis_idx + 1]  # +1 pentru că primul index e channel-ul
+
+        if slice_index is None:
+            slice_index = max_slice // 2
+        elif slice_index < 0 or slice_index >= max_slice:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Index slice invalid: {slice_index}. Range: 0-{max_slice - 1}"
+            )
+
+        # Extrage slice-urile
+        if slice_axis == "axial":
+            slice_data = array[:, :, :, slice_index]  # [4, H, W]
+        elif slice_axis == "coronal":
+            slice_data = array[:, :, slice_index, :]  # [4, H, D]
+        else:  # sagital
+            slice_data = array[:, slice_index, :, :]  # [4, W, D]
+
+        print(f"[VISUALIZE] Slice {slice_axis} #{slice_index}, shape: {slice_data.shape}")
+
+        # Generează vizualizarea
+        if modality == "all":
+            # Creează o figură cu toate modalitățile
+            fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+            fig.suptitle(f'{filename} - {slice_axis.title()} Slice #{slice_index}', fontsize=16)
+
+            for i, (ax, mod_name) in enumerate(zip(axes.flat, modality_names)):
+                im = ax.imshow(slice_data[i], cmap='gray', interpolation='nearest')
+                ax.set_title(f'{mod_name.upper()}')
+                ax.axis('off')
+                plt.colorbar(im, ax=ax, shrink=0.8)
+
+            plt.tight_layout()
+
+        else:
+            # Vizualizează o singură modalitate
+            if modality not in modality_names:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Modalitate invalidă: {modality}. Opțiuni: {modality_names}"
+                )
+
+            mod_idx = modality_names.index(modality)
+
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            im = ax.imshow(slice_data[mod_idx], cmap='gray', interpolation='nearest')
+            ax.set_title(f'{filename} - {modality.upper()} - {slice_axis.title()} Slice #{slice_index}')
+            ax.axis('off')
+            plt.colorbar(im, ax=ax)
+
+        # Convertește figura în base64
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        plt.close(fig)
+
+        # Calculează statistici pentru slice
+        slice_stats = {}
+        for i, mod_name in enumerate(modality_names):
+            mod_slice = slice_data[i]
+            slice_stats[mod_name] = {
+                "min": float(mod_slice.min()),
+                "max": float(mod_slice.max()),
+                "mean": float(mod_slice.mean()),
+                "std": float(mod_slice.std())
+            }
+
+        return {
+            "message": "Vizualizare generată cu succes",
+            "filename": filename,
+            "tensor_info": {
+                "shape": list(array.shape),
+                "dtype": str(array.dtype),
+                "modalities": modality_names
+            },
+            "slice_info": {
+                "axis": slice_axis,
+                "index": slice_index,
+                "max_index": max_slice - 1,
+                "shape": list(slice_data.shape)
+            },
+            "visualization": {
+                "image_base64": image_base64,
+                "modality_shown": modality,
+                "stats": slice_stats
+            },
+            "metadata": metadata,
+            "navigation": {
+                "prev_slice": max(0, slice_index - 1),
+                "next_slice": min(max_slice - 1, slice_index + 1),
+                "total_slices": max_slice
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VISUALIZE] Eroare la vizualizare: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la vizualizare: {str(e)}"
+        )
+
+
+@router.get("/preprocess/slice-info/{filename}")
+async def get_slice_info(filename: str):
+    """
+    Obține informații despre dimensiunile tensorului pentru navigare
+    """
+    if not SERVICE_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Sistemul de preprocesare nu este disponibil"
+        )
+
+    try:
+        import torch
+
+        preprocessed_dir = TEMP_PREPROCESSING_DIR
+        file_path = preprocessed_dir / filename
+
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fișierul preprocesат {filename} nu există"
+            )
+
+        # Încarcă doar header-ul pentru informații rapide
+        data = torch.load(file_path, map_location='cpu')
+
+        if isinstance(data, dict) and 'image_tensor' in data:
+            tensor = data['image_tensor']
+            metadata = data.get('metadata', {})
+        else:
+            tensor = data
+            metadata = {}
+
+        shape = list(tensor.shape)
+
+        if len(shape) != 4 or shape[0] != 4:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format tensor neașteptat: {shape}"
+            )
+
+        channels, height, width, depth = shape
+
+        return {
+            "filename": filename,
+            "tensor_shape": shape,
+            "modalities": ["t1n", "t1c", "t2w", "t2f"],
+            "slice_ranges": {
+                "axial": {"max": depth - 1, "mid": depth // 2},
+                "coronal": {"max": height - 1, "mid": height // 2},
+                "sagital": {"max": width - 1, "mid": width // 2}
+            },
+            "metadata": metadata
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la obținerea informațiilor: {str(e)}"
+        )
+
 
 @router.get("/preprocess/saved")
 async def get_preprocessed_files():

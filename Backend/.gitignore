@@ -1,0 +1,39 @@
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Upload directories
+uploads/
+upload/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+
+# Environment variables
+.env
+.env.local
