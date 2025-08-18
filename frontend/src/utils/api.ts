@@ -229,6 +229,71 @@ export const getFileInfo = async (filename: string): Promise<{
   return response.json();
 };
 
+export const loadFileForViewing = async (filename: string): Promise<File> => {
+  try {
+    console.log(`[API] Încarcă fișierul pentru vizualizare: ${filename}`);
+
+    const response = await fetch(`${API_BASE_URL}/download/${encodeURIComponent(filename)}`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Eroare la încărcare' }));
+      throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
+    }
+
+    // Obține blob-ul fișierului
+    const blob = await response.blob();
+
+    // Creează un obiect File din blob (nu doar salvează pe disc)
+    const file = new File([blob], filename, {
+      type: blob.type || 'application/octet-stream',
+      lastModified: Date.now()
+    });
+
+    console.log(`[API] Fișier încărcat pentru vizualizare: ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    return file;
+
+  } catch (error) {
+    console.error('Eroare la încărcarea fișierului pentru vizualizare:', error);
+    throw error;
+  }
+};
+
+/**
+ * Verifică dacă un fișier există pe server (pentru validarea restore-ului)
+ */
+export const checkFileExists = async (filename: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/info`);
+    return response.ok;
+  } catch (error) {
+    console.error('Eroare la verificarea existenței fișierului:', error);
+    return false;
+  }
+};
+
+/**
+ * Obține lista fișierelor NIfTI disponibile pe server
+ */
+export const getAvailableNiftiFiles = async (): Promise<string[]> => {
+  try {
+    const response = await getUploadedFiles();
+
+    // Filtrează doar fișierele NIfTI
+    const niftiFiles = response.items
+      .filter(item =>
+        item.type === 'file' &&
+        (item.name.endsWith('.nii') || item.name.endsWith('.nii.gz'))
+      )
+      .map(item => item.name);
+
+    return niftiFiles;
+  } catch (error) {
+    console.error('Eroare la obținerea listei de fișiere NIfTI:', error);
+    return [];
+  }
+};
+
 // This is a placeholder for the actual AI analysis function.
 // In a real application, this would make a call to a backend service.
 export async function generateMriAnalysis(

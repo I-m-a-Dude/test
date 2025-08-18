@@ -1,6 +1,6 @@
-import { useState, type DragEvent } from 'react';
+import { useState, type DragEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle, FolderOpen } from 'lucide-react';
+import { UploadCloud, File, X, Loader2, CheckCircle, AlertCircle, FolderOpen, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import { useToast } from '@/utils/hooks/use-toast';
@@ -16,8 +16,15 @@ interface MriUploaderProps {
 }
 
 export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
-  const setMriFile = useMriStore((state) => state.setFile);
-  const mriFile = useMriStore((state) => state.file);
+  const {
+    file,
+    isLoadingFromBackend,
+    lastKnownBackendFile,
+    setFile,
+    setLastKnownBackendFile,
+    loadFileFromBackend,
+    restoreFromBackend
+  } = useMriStore();
   const setAnalysisResult = useResultStore((state) => state.setAnalysisResult);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -28,6 +35,21 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Auto-restore la prima încărcare
+  useEffect(() => {
+    const attemptRestore = async () => {
+      if (!file && !isLoadingFromBackend) {
+        try {
+          await restoreFromBackend();
+        } catch (error) {
+          console.log('[UPLOADER] Restore automată eșuată:', error);
+        }
+      }
+    };
+
+    attemptRestore();
+  }, [file, isLoadingFromBackend, restoreFromBackend]);
+
   const handleFileUpload = async (file: File) => {
     setUploadStatus('uploading');
     setUploadProgress(0);
@@ -35,13 +57,15 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     try {
       const response = await uploadMriFile(
         file,
-        (progress) => setUploadProgress(progress) // Progress callback
+        (progress) => setUploadProgress(progress)
       );
 
       console.log('✅ Upload reușit:', response);
-
       setUploadStatus('success');
       setUploadProgress(100);
+
+      // IMPORTANT: Salvează referința la fișierul de pe backend
+      setLastKnownBackendFile(file.name);
 
       toast({
         title: 'Upload reușit!',
@@ -66,18 +90,15 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
 
   const handleFile = async (selectedFile: File | undefined | null) => {
     if (selectedFile) {
-      // Acceptă fișiere .nii, .nii.gz și .zip
       if (selectedFile.name.endsWith('.nii') ||
           selectedFile.name.endsWith('.nii.gz') ||
           selectedFile.name.endsWith('.zip')) {
-        setMriFile(selectedFile);
+        setFile(selectedFile);
         setAnalysisResult(null, null);
 
-        // Trimite fișierul către backend folosind api.ts
         try {
           await handleFileUpload(selectedFile);
         } catch (error) {
-          // Errorurile sunt gestionate în funcția handleFileUpload
           console.error('Upload failed:', error);
         }
       } else {
@@ -87,6 +108,27 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
           variant: 'destructive',
         });
       }
+    }
+  };
+
+  const handleLoadFromBackend = async (filename: string) => {
+    try {
+      setUploadStatus('uploading');
+      await loadFileFromBackend(filename);
+      setUploadStatus('success');
+      setAnalysisResult(null, null);
+
+      toast({
+        title: 'Fișier încărcat!',
+        description: `${filename} a fost încărcat din server.`,
+      });
+    } catch (error) {
+      setUploadStatus('error');
+      toast({
+        title: 'Eroare la încărcare',
+        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -126,14 +168,15 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   };
 
   const handleRemoveFile = () => {
-    setMriFile(null);
+    setFile(null);
+    setLastKnownBackendFile(null);
     setAnalysisResult(null, null);
     setUploadStatus('idle');
     setUploadProgress(0);
   };
 
   const handleNavigateToAnalysis = () => {
-    if (mriFile) {
+    if (file) {
       setIsNavigating(true);
       navigate(pages.analysis);
     }
@@ -146,6 +189,10 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   };
 
   const getUploadStatusIcon = () => {
+    if (isLoadingFromBackend) {
+      return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
+    }
+
     switch (uploadStatus) {
       case 'uploading':
         return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
@@ -159,6 +206,10 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   };
 
   const getUploadStatusText = () => {
+    if (isLoadingFromBackend) {
+      return 'Se încarcă din server...';
+    }
+
     switch (uploadStatus) {
       case 'uploading':
         return 'Se încarcă pe server...';
@@ -171,9 +222,28 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     }
   };
 
+  // Loading state pentru restore din backend
+  if (isLoadingFromBackend && !file) {
+    return (
+      <div className="w-full">
+        <div className="w-full bg-card border rounded-lg p-6 flex flex-col items-center justify-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">
+            Se încarcă ultimul fișier din server...
+          </p>
+          {lastKnownBackendFile && (
+            <p className="text-xs text-muted-foreground">
+              {lastKnownBackendFile}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
-      {!mriFile ? (
+      {!file ? (
         <div
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
@@ -209,9 +279,9 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
               </p>
               <p className="text-xs text-muted-foreground mt-4">Fișiere .nii, .nii.gz sau .zip</p>
 
-              {/* Buton pentru fișierele de pe server */}
-              {onOpenFileManager && (
-                <div className="mt-6">
+              {/* Opțiuni pentru fișierele existente */}
+              <div className="mt-6 flex flex-col gap-2">
+                {onOpenFileManager && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -221,8 +291,22 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                     <FolderOpen className="h-4 w-4" />
                     Vezi fișierele de pe server
                   </Button>
-                </div>
-              )}
+                )}
+
+                {/* Opțiune rapidă pentru ultimul fișier cunoscut */}
+                {lastKnownBackendFile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleLoadFromBackend(lastKnownBackendFile)}
+                    className="flex items-center gap-2"
+                    disabled={isLoadingFromBackend}
+                  >
+                    <Download className="h-4 w-4" />
+                    Reîncarcă {lastKnownBackendFile}
+                  </Button>
+                )}
+              </div>
             </div>
             <input
               id="file-upload"
@@ -230,7 +314,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
               className="sr-only"
               accept=".nii,.nii.gz,.zip"
               onChange={(e) => handleFile(e.target.files?.[0])}
-              disabled={uploadStatus === 'uploading'}
+              disabled={uploadStatus === 'uploading' || isLoadingFromBackend}
             />
           </label>
         </div>
@@ -238,7 +322,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
         <div className="w-full bg-card border rounded-lg p-6 flex flex-col items-center justify-center gap-4">
           <div className="flex items-center gap-3 bg-muted p-3 rounded-md w-full max-w-md">
             <File className="h-6 w-6 text-primary" />
-            <span className="font-mono text-sm truncate flex-1">{mriFile.name}</span>
+            <span className="font-mono text-sm truncate flex-1">{file.name}</span>
             <div className="flex items-center gap-2">
               {getUploadStatusIcon()}
               <Button
@@ -246,21 +330,21 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                 size="icon"
                 onClick={handleRemoveFile}
                 className="h-8 w-8"
-                disabled={uploadStatus === 'uploading'}
+                disabled={uploadStatus === 'uploading' || isLoadingFromBackend}
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Status upload */}
-          {uploadStatus !== 'idle' && (
+          {/* Status upload/loading */}
+          {(uploadStatus !== 'idle' || isLoadingFromBackend) && (
             <div className="w-full max-w-md">
               <div className="flex items-center justify-between text-sm mb-2">
                 <span className={cn(
                   uploadStatus === 'success' && 'text-green-600',
                   uploadStatus === 'error' && 'text-red-600',
-                  uploadStatus === 'uploading' && 'text-blue-600'
+                  (uploadStatus === 'uploading' || isLoadingFromBackend) && 'text-blue-600'
                 )}>
                   {getUploadStatusText()}
                 </span>
@@ -281,7 +365,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
 
           <Button
             onClick={handleNavigateToAnalysis}
-            disabled={isNavigating || uploadStatus === 'uploading'}
+            disabled={isNavigating || uploadStatus === 'uploading' || isLoadingFromBackend}
             size="lg"
             className="rounded-full"
           >

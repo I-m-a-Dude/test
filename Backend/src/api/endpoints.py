@@ -205,6 +205,8 @@ async def get_file_info(filename: str):
         raise HTTPException(status_code=500, detail=f"Eroare la citirea informațiilor: {str(e)}")
 
 
+
+
 @router.get("/ml/status")
 async def get_ml_status():
     """

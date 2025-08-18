@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/utils/hooks/use-toast';
+import { useMriStore } from '@/utils/stores/mri-store';
 import { getUploadedFiles, downloadFileAttachment, deleteUploadedFile } from '@/utils/api';
 
 interface FileItem {
@@ -27,13 +28,19 @@ interface FilesResponse {
   folders_count: number;
 }
 
-export function FileManager() {
+interface FileManagerProps {
+  onFileLoaded?: () => void; // Callback pentru când un fișier e încărcat în viewer
+}
+
+export function FileManager({ onFileLoaded }: FileManagerProps) {
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [loadingInViewer, setLoadingInViewer] = useState<string | null>(null);
 
   const { toast } = useToast();
+  const { loadFileFromBackend, setLastKnownBackendFile } = useMriStore();
 
   const loadFiles = async () => {
     setLoading(true);
@@ -80,6 +87,47 @@ export function FileManager() {
       });
     } finally {
       setDownloading(null);
+    }
+  };
+
+  const handleLoadInViewer = async (itemName: string) => {
+    // Verifică dacă este un fișier NIfTI valid
+    const item = items.find(i => i.name === itemName);
+    if (!item || item.type !== 'file' || !item.name.match(/\.nii(\.gz)?$/)) {
+      toast({
+        title: 'Fișier invalid',
+        description: 'Doar fișierele .nii și .nii.gz pot fi încărcate în viewer.',
+        variant: 'destructive',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setLoadingInViewer(itemName);
+    try {
+      await loadFileFromBackend(itemName);
+      setLastKnownBackendFile(itemName);
+
+      toast({
+        title: 'Fișier încărcat în viewer!',
+        description: `${itemName} este acum disponibil pentru vizualizare.`,
+        duration: 3000,
+      });
+
+      // Notifică părintele că fișierul a fost încărcat
+      if (onFileLoaded) {
+        onFileLoaded();
+      }
+    } catch (error) {
+      console.error('Eroare la încărcarea în viewer:', error);
+      toast({
+        title: 'Eroare la încărcarea în viewer',
+        description: error instanceof Error ? error.message : 'Eroare necunoscută.',
+        variant: 'destructive',
+        duration: 3000,
+      });
+    } finally {
+      setLoadingInViewer(null);
     }
   };
 
@@ -162,6 +210,10 @@ export function FileManager() {
     }
   };
 
+  const canLoadInViewer = (item: FileItem) => {
+    return item.type === 'file' && item.name.match(/\.nii(\.gz)?$/);
+  };
+
   useEffect(() => {
     loadFiles();
   }, []);
@@ -226,11 +278,25 @@ export function FileManager() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Buton pentru încărcarea în viewer - doar pentru fișiere NIfTI */}
+                {canLoadInViewer(item) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleLoadInViewer(item.name)}
+                    disabled={loadingInViewer === item.name || downloading === item.name || deleting === item.name}
+                    className="flex items-center gap-1"
+                  >
+                    <Eye className="h-3 w-3" />
+                    {loadingInViewer === item.name ? 'Se încarcă...' : 'Vezi în viewer'}
+                  </Button>
+                )}
+
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleDownload(item.name)}
-                  disabled={downloading === item.name || deleting === item.name}
+                  disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
                   className="flex items-center gap-1"
                 >
                   <Download className="h-3 w-3" />
@@ -240,7 +306,7 @@ export function FileManager() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleDelete(item.name)}
-                  disabled={downloading === item.name || deleting === item.name}
+                  disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
                   className="flex items-center gap-1 text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-3 w-3" />

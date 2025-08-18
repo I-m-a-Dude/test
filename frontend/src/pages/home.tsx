@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FolderOpen } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { MriUploader } from '@/components/mri-uploader';
 import { FileManager } from '@/components/file-manager';
+import { pages } from '@/utils/pages';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +15,15 @@ import {
 
 export default function HomePage() {
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleFileLoadedInViewer = () => {
+    // Închide dialogul File Manager
+    setFileManagerOpen(false);
+
+    // Navighează la pagina de analiză
+    navigate(pages.analysis);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -30,7 +41,7 @@ export default function HomePage() {
           <MriUploader onOpenFileManager={() => setFileManagerOpen(true)} />
         </div>
 
-        {/* File Manager Dialog */}
+        {/* File Manager Dialog cu callback pentru încărcarea în viewer */}
         <Dialog open={fileManagerOpen} onOpenChange={setFileManagerOpen}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden p-0">
             <DialogHeader className="p-6 pb-0">
@@ -40,10 +51,12 @@ export default function HomePage() {
               </DialogTitle>
               <DialogDescription>
                 Descarcă, șterge sau vizualizează informațiile despre fișierele încărcate pe server.
+                <br />
+                <strong>Tip:</strong> Folosește butonul "Vezi în viewer" pentru a încărca direct un fișier NIfTI în vizualizator.
               </DialogDescription>
             </DialogHeader>
             <div className="p-6 pt-0 overflow-auto">
-              <FileManager />
+              <FileManager onFileLoaded={handleFileLoadedInViewer} />
             </div>
           </DialogContent>
         </Dialog>
