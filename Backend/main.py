@@ -46,7 +46,7 @@ def cleanup_resources():
         except Exception as e:
             print(f"[SHUTDOWN] Eroare la cleanup ML: {str(e)}")
 
-    print("[SHUTDOWN] Aplikatia s-a inchis cu succes")
+    print("[SHUTDOWN] Aplicatia s-a inchis cu succes")
 
 
 def signal_handler(signum, frame):
