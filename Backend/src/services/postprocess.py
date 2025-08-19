@@ -114,10 +114,29 @@ class GliomaPostprocessor:
 
         return segmentation, stats
 
-    def save_as_nifti(self, segmentation: np.ndarray, output_path: Path,
-                      reference_nifti: Optional[Path] = None) -> Path:
-        """Salveaza segmentarea ca NIfTI"""
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+    def save_as_nifti(self, segmentation: np.ndarray, folder_name: str,
+                      output_base_dir: Path = None, reference_nifti: Optional[Path] = None) -> Path:
+        """
+        Salveaza segmentarea ca NIfTI într-un folder cu numele specificat
+
+        Args:
+            segmentation: Array-ul cu segmentarea
+            folder_name: Numele folderului (și fisierului)
+            output_base_dir: Directorul de bază pentru salvare (default: "results")
+            reference_nifti: Fisier de referință pentru header NIfTI
+
+        Returns:
+            Calea către fisierul salvat
+        """
+        if output_base_dir is None:
+            output_base_dir = Path("results")
+
+        # Creeaza folderul pentru acest rezultat
+        result_folder = output_base_dir / folder_name
+        result_folder.mkdir(parents=True, exist_ok=True)
+
+        # Calea către fisierul final
+        output_path = result_folder / f"{folder_name}-seg.nii.gz"
 
         if reference_nifti and reference_nifti.exists():
             ref_img = nib.load(reference_nifti)
@@ -126,6 +145,7 @@ class GliomaPostprocessor:
             nifti_img = nib.Nifti1Image(segmentation.astype(np.uint8), np.eye(4))
 
         nib.save(nifti_img, str(output_path))
+        print(f"[POSTPROCESS] Rezultat salvat în: {output_path}")
         return output_path
 
 
@@ -135,13 +155,14 @@ def create_postprocessor() -> GliomaPostprocessor:
     return GliomaPostprocessor()
 
 
-def quick_postprocess(predictions: torch.Tensor, output_path: Path = None) -> Tuple[np.ndarray, Dict]:
+def quick_postprocess(predictions: torch.Tensor, folder_name: str, output_base_dir: Path = None) -> Tuple[
+    np.ndarray, Dict]:
     """Postprocesare rapida"""
     processor = create_postprocessor()
     segmentation, stats = processor.postprocess_segmentation(predictions)
 
-    if output_path:
-        processor.save_as_nifti(segmentation, output_path)
+    if folder_name:
+        processor.save_as_nifti(segmentation, folder_name, output_base_dir)
 
     return segmentation, stats
 

@@ -101,10 +101,6 @@ class GliomaInferenceService:
 
                 if output_dir is None:
                     output_dir = Path("results")
-                    output_dir.mkdir(exist_ok=True)
-
-                # FIXED: Format nou pentru nume fisier (folder-seg.nii.gz)
-                output_path = output_dir / f"{folder_path.name}-seg.nii.gz"
 
                 # Foloseste primul fisier gasit ca referinta pentru header
                 reference_nifti = None
@@ -112,8 +108,9 @@ class GliomaInferenceService:
                 if original_paths:
                     reference_nifti = list(original_paths.values())[0]
 
+                # MODIFIED: Salveaza folosind noua metoda cu folder
                 saved_path = self.postprocessor.save_as_nifti(
-                    segmentation, output_path, reference_nifti
+                    segmentation, folder_path.name, output_dir, reference_nifti
                 )
                 print(f"Rezultat salvat: {saved_path}")
 

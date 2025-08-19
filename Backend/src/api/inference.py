@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-API Endpoints pentru serviciul de inferenta
+API Endpoints pentru serviciul de inferenta - adaptat pentru salvare in foldere
 """
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -124,10 +124,11 @@ async def run_inference_on_folder_endpoint(
             "preprocessing_config": result["preprocessing_config"]
         }
 
-        # Redenumeste fisierul daca este specificat
+        # MODIFIED: Redenumire adaptata pentru noua structura
         if save_result and result["saved_path"] and output_filename:
             try:
                 old_path = Path(result["saved_path"])
+                # Păstrează același folder, doar schimbă numele fișierului
                 new_path = old_path.parent / output_filename
                 old_path.rename(new_path)
                 response_data["saved_file"] = str(new_path)
@@ -229,7 +230,7 @@ async def run_inference_on_preprocessed_endpoint(filename: str):
 @router.get("/results")
 async def get_inference_results():
     """
-    Listeaza rezultatele de inferenta salvate
+    Listeaza rezultatele de inferenta salvate - ADAPTAT pentru structura cu foldere
     """
     try:
         results_dir = Path("results")
@@ -242,21 +243,26 @@ async def get_inference_results():
             }
 
         results = []
-        # Cauta fisiere cu pattern *-seg.nii.gz
-        for result_path in results_dir.glob("*-seg.nii.gz"):
-            stat = result_path.stat()
 
-            # Extrage numele folderului din nume fisier (elimina -seg.nii.gz)
-            folder_name = result_path.name.replace('-seg.nii.gz', '')
+        # MODIFIED: Cauta foldere cu fisiere seg in loc de fisiere directe
+        for folder_path in results_dir.iterdir():
+            if folder_path.is_dir():
+                # Cauta fisierul seg in folder
+                seg_files = list(folder_path.glob("*-seg.nii.gz"))
 
-            results.append({
-                "filename": result_path.name,
-                "folder_name": folder_name,
-                "full_path": str(result_path),
-                "size_mb": get_file_size_mb(stat.st_size),
-                "created": stat.st_ctime,
-                "modified": stat.st_mtime
-            })
+                if seg_files:
+                    seg_file = seg_files[0]  # Primul gasit
+                    stat = seg_file.stat()
+
+                    results.append({
+                        "folder_name": folder_path.name,
+                        "filename": seg_file.name,
+                        "full_path": str(seg_file),
+                        "result_folder": str(folder_path),
+                        "size_mb": get_file_size_mb(stat.st_size),
+                        "created": stat.st_ctime,
+                        "modified": stat.st_mtime
+                    })
 
         # Sorteaza dupa data crearii
         results.sort(key=lambda x: x["created"], reverse=True)
@@ -277,24 +283,34 @@ async def get_inference_results():
 @router.get("/results/{folder_name}/download")
 async def download_inference_result(folder_name: str):
     """
-    Descarca rezultatul de inferinta pentru un folder
+    Descarca rezultatul de inferinta pentru un folder - ADAPTAT pentru noua structura
     """
     try:
-        result_path = Path("results") / f"{folder_name}-seg.nii.gz"
+        result_folder = Path("results") / folder_name
 
-        if not result_path.exists():
+        if not result_folder.exists() or not result_folder.is_dir():
             raise HTTPException(
                 status_code=404,
-                detail=f"Rezultatul pentru {folder_name} nu exista"
+                detail=f"Folderul cu rezultatul pentru {folder_name} nu exista"
             )
 
-        print(f"[INFERENCE API] Descarcare rezultat: {folder_name}")
+        # Cauta fisierul seg in folder
+        seg_files = list(result_folder.glob("*-seg.nii.gz"))
+
+        if not seg_files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fisierul seg pentru {folder_name} nu exista in folder"
+            )
+
+        result_path = seg_files[0]
+        print(f"[INFERENCE API] Descarcare rezultat: {folder_name} -> {result_path}")
 
         return FileResponse(
             path=str(result_path),
             media_type="application/gzip",
-            filename=f"{folder_name}-seg.nii.gz",
-            headers={"Content-Disposition": f"attachment; filename={folder_name}-seg.nii.gz"}
+            filename=result_path.name,
+            headers={"Content-Disposition": f"attachment; filename={result_path.name}"}
         )
 
     except HTTPException:
@@ -310,26 +326,37 @@ async def download_inference_result(folder_name: str):
 @router.delete("/results/{folder_name}")
 async def delete_inference_result(folder_name: str):
     """
-    sterge rezultatul de inferinta pentru un folder
+    sterge rezultatul de inferinta pentru un folder - ADAPTAT pentru noua structura
     """
     try:
-        result_path = Path("results") / f"{folder_name}-seg.nii.gz"
+        import shutil
 
-        if not result_path.exists():
+        result_folder = Path("results") / folder_name
+
+        if not result_folder.exists() or not result_folder.is_dir():
             raise HTTPException(
                 status_code=404,
-                detail=f"Rezultatul pentru {folder_name} nu exista"
+                detail=f"Folderul cu rezultatul pentru {folder_name} nu exista"
             )
 
-        file_size = result_path.stat().st_size
-        result_path.unlink()
+        # Calculeaza dimensiunea totala inainte de stergere
+        total_size = 0
+        file_count = 0
+        for file_path in result_folder.rglob("*"):
+            if file_path.is_file():
+                total_size += file_path.stat().st_size
+                file_count += 1
 
-        print(f"[INFERENCE API] Rezultat sters: {folder_name}")
+        # sterge intregul folder
+        shutil.rmtree(result_folder)
+
+        print(f"[INFERENCE API] Folder rezultat sters: {folder_name}")
 
         return {
             "message": f"Rezultatul pentru {folder_name} a fost sters",
-            "deleted_file": result_path.name,
-            "size_freed_mb": get_file_size_mb(file_size)
+            "deleted_folder": folder_name,
+            "files_deleted": file_count,
+            "size_freed_mb": get_file_size_mb(total_size)
         }
 
     except HTTPException:
@@ -345,23 +372,35 @@ async def delete_inference_result(folder_name: str):
 @router.get("/results/{folder_name}/info")
 async def get_inference_result_info(folder_name: str):
     """
-    Obtine informatii despre un rezultat de inferinta
+    Obtine informatii despre un rezultat de inferinta - ADAPTAT pentru noua structura
     """
     try:
-        result_path = Path("results") / f"{folder_name}-seg.nii.gz"
+        result_folder = Path("results") / folder_name
 
-        if not result_path.exists():
+        if not result_folder.exists() or not result_folder.is_dir():
             raise HTTPException(
                 status_code=404,
-                detail=f"Rezultatul pentru {folder_name} nu exista"
+                detail=f"Folderul cu rezultatul pentru {folder_name} nu exista"
             )
+
+        # Cauta fisierul seg
+        seg_files = list(result_folder.glob("*-seg.nii.gz"))
+
+        if not seg_files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Fisierul seg pentru {folder_name} nu exista in folder"
+            )
+
+        result_path = seg_files[0]
 
         # Informatii de baza despre fisier
         stat = result_path.stat()
         file_info = {
-            "filename": result_path.name,
             "folder_name": folder_name,
+            "filename": result_path.name,
             "full_path": str(result_path),
+            "result_folder": str(result_folder),
             "size_mb": get_file_size_mb(stat.st_size),
             "created": stat.st_ctime,
             "modified": stat.st_mtime
