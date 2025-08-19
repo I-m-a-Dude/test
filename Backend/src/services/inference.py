@@ -148,8 +148,14 @@ class GliomaInferenceService:
                     "cached": True,
                     "folder_name": folder_name,
                     "message": "Folosit rezultat din cache",
-                    "timing": {"total_time": 0.0, "cache_lookup_time": 0.1},
+                    "timing": {
+                        "preprocess_time": 0.1,
+                        "inference_time": 0.1,
+                        "postprocess_time": 0.1,
+                        "total_time": 0.1
+                    },
                     "segmentation": cached_info.get("segmentation", {}),
+                    "preprocessing_config": {},  # Config gol pentru cache
                     "saved_path": str(existing_result),
                     "cache_info": {
                         "file_size_mb": cached_info.get("file_size_mb", 0),
