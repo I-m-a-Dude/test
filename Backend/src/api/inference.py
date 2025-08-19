@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-API Endpoints pentru serviciul de inferenta - adaptat pentru salvare in foldere
+API Endpoints pentru serviciul de inferenta - cu suport cache
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pathlib import Path
 
@@ -14,7 +14,8 @@ try:
         get_inference_service,
         run_inference_on_folder,
         run_inference_on_preprocessed,
-        get_postprocessor
+        get_postprocessor,
+        check_existing_result
     )
 
     INFERENCE_AVAILABLE = True
@@ -73,15 +74,46 @@ async def get_inference_status():
         }
 
 
+@router.get("/cache-check/{folder_name}")
+async def check_cache_status(folder_name: str):
+    """
+    Verifica daca exista rezultat in cache pentru un folder
+    """
+    try:
+        existing_result = check_existing_result(folder_name)
+
+        if existing_result:
+            stat = existing_result.stat()
+            return {
+                "has_cache": True,
+                "cached_file": str(existing_result),
+                "file_size_mb": get_file_size_mb(stat.st_size),
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime
+            }
+        else:
+            return {
+                "has_cache": False,
+                "message": f"Nu exista rezultat in cache pentru {folder_name}"
+            }
+
+    except Exception as e:
+        return {
+            "has_cache": False,
+            "error": str(e)
+        }
+
+
 @router.post("/folder/{folder_name}")
 async def run_inference_on_folder_endpoint(
         folder_name: str,
         save_result: bool = True,
-        output_filename: str = None
+        output_filename: str = None,
+        force_reprocess: bool = Query(False, description="Forțează re-procesarea chiar dacă există cache")
 ):
     """
     Ruleaza inferenta completa pe un folder cu modalitati
-    Pipeline: preprocess -> inference -> postprocess -> save
+    Pipeline: cache-check -> preprocess -> inference -> postprocess -> save
     """
     if not INFERENCE_AVAILABLE:
         raise HTTPException(
@@ -99,9 +131,11 @@ async def run_inference_on_folder_endpoint(
             )
 
         print(f"[INFERENCE API] Start pipeline pentru folder: {folder_name}")
+        if force_reprocess:
+            print(f"[INFERENCE API] Re-procesare forțată activată")
 
-        # Ruleaza pipeline-ul complet
-        result = run_inference_on_folder(folder_path, save_result)
+        # Ruleaza pipeline-ul complet cu verificare cache
+        result = run_inference_on_folder(folder_path, save_result, force_reprocess)
 
         if not result["success"]:
             raise HTTPException(
@@ -109,26 +143,36 @@ async def run_inference_on_folder_endpoint(
                 detail=f"Inferenta a esuat: {result.get('error', 'Eroare necunoscuta')}"
             )
 
-        # Pregateste raspunsul (fara array-ul mare)
+        # Pregateste raspunsul
         response_data = {
-            "message": f"Inferenta completa pentru {folder_name}",
+            "message": result.get("message", f"Inferenta completa pentru {folder_name}"),
             "folder_name": result["folder_name"],
+            "cached": result.get("cached", False),
             "timing": result["timing"],
-            "segmentation_info": {
-                "shape": list(result["segmentation"]["shape"]),
-                "classes_found": result["segmentation"]["classes_found"],
-                "class_counts": result["segmentation"]["class_counts"],
-                "total_segmented_voxels": result["segmentation"]["total_segmented_voxels"]
-            },
-            "saved_file": result["saved_path"],
-            "preprocessing_config": result["preprocessing_config"]
+            "saved_file": result["saved_path"]
         }
 
-        # MODIFIED: Redenumire adaptata pentru noua structura
-        if save_result and result["saved_path"] and output_filename:
+        # Adauga informatii despre segmentare doar daca nu e din cache sau daca avem datele
+        if "segmentation" in result and result["segmentation"]:
+            response_data["segmentation_info"] = {
+                "shape": result["segmentation"].get("shape", []),
+                "classes_found": result["segmentation"].get("classes_found", []),
+                "class_counts": result["segmentation"].get("class_counts", {}),
+                "total_segmented_voxels": result["segmentation"].get("total_segmented_voxels", 0)
+            }
+
+        # Adauga config doar daca nu e din cache
+        if not result.get("cached", False) and "preprocessing_config" in result:
+            response_data["preprocessing_config"] = result["preprocessing_config"]
+
+        # Adauga informatii despre cache daca exista
+        if result.get("cached", False) and "cache_info" in result:
+            response_data["cache_info"] = result["cache_info"]
+
+        # Redenumire fisier daca e specificat
+        if save_result and result["saved_path"] and output_filename and not result.get("cached", False):
             try:
                 old_path = Path(result["saved_path"])
-                # Păstrează același folder, doar schimbă numele fișierului
                 new_path = old_path.parent / output_filename
                 old_path.rename(new_path)
                 response_data["saved_file"] = str(new_path)
@@ -136,7 +180,12 @@ async def run_inference_on_folder_endpoint(
             except Exception as e:
                 print(f"[WARNING] Nu s-a putut redenumi fisierul: {e}")
 
-        print(f"[INFERENCE API] Inferenta completa in {result['timing']['total_time']:.2f}s")
+        # Mesaj final
+        if result.get("cached", False):
+            print(f"[INFERENCE API] Folosit cache pentru {folder_name}")
+        else:
+            print(f"[INFERENCE API] Inferenta completa in {result['timing']['total_time']:.2f}s")
+
         return response_data
 
     except HTTPException:
@@ -206,6 +255,7 @@ async def run_inference_on_preprocessed_endpoint(filename: str):
             "message": f"Inferenta completa pe date preprocesate",
             "source_file": filename,
             "folder_name": result["folder_name"],
+            "cached": result.get("cached", False),
             "timing": result["timing"],
             "segmentation_info": {
                 "shape": list(result["segmentation"]["shape"]),
@@ -230,7 +280,7 @@ async def run_inference_on_preprocessed_endpoint(filename: str):
 @router.get("/results")
 async def get_inference_results():
     """
-    Listeaza rezultatele de inferenta salvate - ADAPTAT pentru structura cu foldere
+    Listeaza rezultatele de inferenta salvate
     """
     try:
         results_dir = Path("results")
@@ -244,7 +294,7 @@ async def get_inference_results():
 
         results = []
 
-        # MODIFIED: Cauta foldere cu fisiere seg in loc de fisiere directe
+        # Cauta foldere cu fisiere seg
         for folder_path in results_dir.iterdir():
             if folder_path.is_dir():
                 # Cauta fisierul seg in folder
@@ -261,7 +311,8 @@ async def get_inference_results():
                         "result_folder": str(folder_path),
                         "size_mb": get_file_size_mb(stat.st_size),
                         "created": stat.st_ctime,
-                        "modified": stat.st_mtime
+                        "modified": stat.st_mtime,
+                        "has_cache": True  # Marcheaza ca fiind in cache
                     })
 
         # Sorteaza dupa data crearii
@@ -270,7 +321,8 @@ async def get_inference_results():
         return {
             "inference_results": results,
             "count": len(results),
-            "results_dir": str(results_dir)
+            "results_dir": str(results_dir),
+            "cache_enabled": True
         }
 
     except Exception as e:
@@ -283,7 +335,7 @@ async def get_inference_results():
 @router.get("/results/{folder_name}/download")
 async def download_inference_result(folder_name: str):
     """
-    Descarca rezultatul de inferinta pentru un folder - ADAPTAT pentru noua structura
+    Descarca rezultatul de inferinta pentru un folder
     """
     try:
         result_folder = Path("results") / folder_name
@@ -304,7 +356,7 @@ async def download_inference_result(folder_name: str):
             )
 
         result_path = seg_files[0]
-        print(f"[INFERENCE API] Descarcare rezultat: {folder_name} -> {result_path}")
+        print(f"[INFERENCE API] Descarcare rezultat (cache): {folder_name} -> {result_path}")
 
         return FileResponse(
             path=str(result_path),
@@ -326,7 +378,7 @@ async def download_inference_result(folder_name: str):
 @router.delete("/results/{folder_name}")
 async def delete_inference_result(folder_name: str):
     """
-    sterge rezultatul de inferinta pentru un folder - ADAPTAT pentru noua structura
+    sterge rezultatul de inferinta pentru un folder (curata cache-ul)
     """
     try:
         import shutil
@@ -350,29 +402,79 @@ async def delete_inference_result(folder_name: str):
         # sterge intregul folder
         shutil.rmtree(result_folder)
 
-        print(f"[INFERENCE API] Folder rezultat sters: {folder_name}")
+        print(f"[INFERENCE API] Cache curatat pentru: {folder_name}")
 
         return {
-            "message": f"Rezultatul pentru {folder_name} a fost sters",
+            "message": f"Cache pentru {folder_name} a fost curatat",
             "deleted_folder": folder_name,
             "files_deleted": file_count,
-            "size_freed_mb": get_file_size_mb(total_size)
+            "size_freed_mb": get_file_size_mb(total_size),
+            "cache_cleared": True
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[INFERENCE API] Eroare la stergerea rezultatului: {str(e)}")
+        print(f"[INFERENCE API] Eroare la curatarea cache-ului: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Eroare la stergere: {str(e)}"
         )
 
 
+@router.delete("/cache/clear-all")
+async def clear_all_cache():
+    """
+    Curata tot cache-ul de inferenta
+    """
+    try:
+        import shutil
+
+        results_dir = Path("results")
+
+        if not results_dir.exists():
+            return {
+                "message": "Nu exista cache de curatat",
+                "cache_cleared": True,
+                "folders_deleted": 0,
+                "size_freed_mb": 0
+            }
+
+        # Calculeaza dimensiunea totala
+        total_size = 0
+        folder_count = 0
+
+        for folder_path in results_dir.iterdir():
+            if folder_path.is_dir():
+                folder_count += 1
+                for file_path in folder_path.rglob("*"):
+                    if file_path.is_file():
+                        total_size += file_path.stat().st_size
+
+        # sterge tot directorul results
+        shutil.rmtree(results_dir)
+
+        print(f"[INFERENCE API] Tot cache-ul curatat: {folder_count} foldere")
+
+        return {
+            "message": f"Tot cache-ul a fost curatat",
+            "folders_deleted": folder_count,
+            "size_freed_mb": get_file_size_mb(total_size),
+            "cache_cleared": True
+        }
+
+    except Exception as e:
+        print(f"[INFERENCE API] Eroare la curatarea totala: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la curatarea cache-ului: {str(e)}"
+        )
+
+
 @router.get("/results/{folder_name}/info")
 async def get_inference_result_info(folder_name: str):
     """
-    Obtine informatii despre un rezultat de inferinta - ADAPTAT pentru noua structura
+    Obtine informatii despre un rezultat de inferinta
     """
     try:
         result_folder = Path("results") / folder_name
@@ -403,7 +505,8 @@ async def get_inference_result_info(folder_name: str):
             "result_folder": str(result_folder),
             "size_mb": get_file_size_mb(stat.st_size),
             "created": stat.st_ctime,
-            "modified": stat.st_mtime
+            "modified": stat.st_mtime,
+            "is_cached": True
         }
 
         # incearca sa citeasca informatii din fisierul NIfTI
