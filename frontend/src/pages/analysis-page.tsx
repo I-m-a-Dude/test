@@ -31,8 +31,8 @@ export default function AnalysisPage() {
         setFile(segmentationFile);
         setLastKnownBackendFile(segmentationFile.name);
         toast({
-          title: 'Segmentare încărcată',
-          description: 'Fișierul de segmentare a fost încărcat pentru vizualizare.',
+          title: 'Loaded segmentation',
+          description: 'The segmentation file has been uploaded for viewing.',
         });
       }
       navigate(pages.result);
@@ -44,8 +44,8 @@ export default function AnalysisPage() {
   const generateAnalysis = async () => {
     if (!file) {
       toast({
-        title: 'Fișier lipsă',
-        description: 'Te rog să încarci mai întâi un fișier MRI.',
+        title: 'Missing file',
+        description: 'Please upload an MRI file first.',
         variant: 'destructive',
       });
       return;
@@ -56,14 +56,14 @@ export default function AnalysisPage() {
 
     try {
       // Step 1: Start analysis
-      setGenerationProgress('Se identifică folderul cu modalitățile MRI...');
+      setGenerationProgress('Identifying MRI modalities...');
 
       // Step 2: Generate analysis (this now includes inference)
-      setGenerationProgress('Se rulează inferența AI pe toate modalitățile...');
+      setGenerationProgress('Rolling out AI inference...');
       const result = await generateMriAnalysis(file, 'Analizează pentru gliome post-tratament');
 
       // Step 3: Store results
-      setGenerationProgress('Se procesează rezultatele...');
+      setGenerationProgress('Storing results...');
       setAnalysisResult(
         result.analysis,
         file.name,
@@ -74,14 +74,14 @@ export default function AnalysisPage() {
       // Step 4: Success feedback
       if (result.segmentationFile) {
         toast({
-          title: 'Analiză completă cu succes! 🎉',
-          description: `Segmentarea a fost generată cu succes. Poți vizualiza rezultatele acum.`,
+          title: 'Analysis complete',
+          description: `The segmentation has been successfully generated. You can view the results now.`,
           duration: 5000,
         });
       } else {
         toast({
-          title: 'Analiză completă',
-          description: 'Analiza text a fost generată. Vezi rezultatele pentru detalii.',
+          title: 'Analysis complete',
+          description: 'The text analysis has been generated. See the results for details.',
           duration: 5000,
         });
       }
@@ -90,22 +90,22 @@ export default function AnalysisPage() {
       console.error('Analysis failed:', error);
 
       // Show specific error messages
-      let errorMessage = 'Ceva nu a mers bine la generarea analizei.';
+      let errorMessage = 'Something went wrong with the generation of the analysis.';
 
       if (error instanceof Error) {
         if (error.message.includes('folder')) {
-          errorMessage = 'Nu s-a putut identifica folderul cu modalitățile MRI. Asigură-te că fișierul face parte dintr-un set complet de modalități.';
+          errorMessage = 'The folder with the MRI modalities could not be identified. Make sure that the file is part of a complete set of modalities.';
         } else if (error.message.includes('inference')) {
-          errorMessage = 'Inferența AI a eșuat. Verifică că serverul ML este funcțional.';
+          errorMessage = 'The AI inference failed. Please check the file and try again.';
         } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          errorMessage = 'Eroare de conexiune. Verifică că serverul backend rulează.';
+          errorMessage = 'Connection error. Check that the backend server is running.';
         } else {
           errorMessage = error.message;
         }
       }
 
       toast({
-        title: 'Eroare la analiză',
+        title: 'Error Generating Analysis',
         description: errorMessage,
         variant: 'destructive',
         duration: 7000,
@@ -121,7 +121,7 @@ export default function AnalysisPage() {
       return (
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          {generationProgress || 'Se generează...'}
+          {generationProgress || 'Generating...'}
         </>
       );
     }
@@ -129,14 +129,14 @@ export default function AnalysisPage() {
       return (
         <>
           <FileCheck className="mr-2 h-4 w-4" />
-          Vizualizează Segmentarea
+          View Results
         </>
       );
     }
     return (
       <>
         <BrainCircuit className="mr-2 h-4 w-4" />
-        Generează Segmentare AI
+        Generate Analysis
       </>
     );
   };
@@ -163,7 +163,7 @@ export default function AnalysisPage() {
           </Button>
           <Button variant="outline" asChild className="rounded-full">
               <Link to="/">
-                Înapoi la Upload
+                Back to Home
               </Link>
           </Button>
         </div>
@@ -179,12 +179,12 @@ export default function AnalysisPage() {
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 backdrop-blur-sm">
                 <div className="bg-card border rounded-lg p-6 max-w-md text-center">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-                  <h3 className="font-semibold mb-2">Rulează Analiza AI</h3>
+                  <h3 className="font-semibold mb-2">Working on processing</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {generationProgress || 'Se procesează...'}
+                    {generationProgress || 'Generating analysis...'}
                   </p>
                   <div className="text-xs text-muted-foreground">
-                    Acest proces poate dura câteva minute
+                    Please wait while the analysis is being generated. This may take a few moments depending on the file size and complexity.
                   </div>
                 </div>
               </div>

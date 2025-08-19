@@ -42,7 +42,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [loadingInViewer, setLoadingInViewer] = useState<string | null>(null);
 
-  // States pentru folder selection
+  // States for folder selection
   const [showFolderSelection, setShowFolderSelection] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
   const [selectedNiftiFile, setSelectedNiftiFile] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     return {
       type: 'OTHER',
       label: 'Other MRI',
-      description: 'Secvență MRI - tip nedetectat automat',
+      description: 'MRI sequence - type not automatically detected',
       color: 'bg-gray-100 text-gray-800 border-gray-200',
       icon: '⚪'
     };
@@ -97,16 +97,16 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
 
       if (response.total_count === 0) {
         toast({
-          title: 'Niciun element găsit',
-          description: 'Nu există fișiere sau foldere pe server.',
+          title: 'No items found',
+          description: 'There are no files or folders on the server.',
           duration: 3000,
         });
       }
     } catch (error) {
-      console.error('Eroare la încărcarea elementelor:', error);
+      console.error('Error loading items:', error);
       toast({
-        title: 'Eroare',
-        description: 'Nu s-au putut încărca elementele de pe server.',
+        title: 'Error',
+        description: 'Could not load items from the server.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -120,15 +120,15 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     try {
       await downloadFileAttachment(itemName);
       toast({
-        title: 'Descărcare reușită',
-        description: `${itemName} a fost descărcat.`,
+        title: 'Download successful',
+        description: `${itemName} has been downloaded.`,
         duration: 3000,
       });
     } catch (error) {
-      console.error('Eroare la descărcare:', error);
+      console.error('Error downloading:', error);
       toast({
-        title: 'Eroare la descărcare',
-        description: error instanceof Error ? error.message : 'Eroare necunoscută.',
+        title: 'Download error',
+        description: error instanceof Error ? error.message : 'Unknown error.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -141,8 +141,8 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     const item = items.find(i => i.name === itemName);
     if (!item || item.type !== 'file' || !item.name.match(/\.nii(\.gz)?$/)) {
       toast({
-        title: 'Fișier invalid',
-        description: 'Doar fișierele .nii și .nii.gz pot fi încărcate în viewer.',
+        title: 'Invalid file',
+        description: 'Only .nii and .nii.gz files can be loaded in the viewer.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -156,8 +156,8 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
       setLastKnownBackendFile(itemName);
 
       toast({
-        title: 'Fișier încărcat în viewer!',
-        description: `${itemName} este acum disponibil pentru vizualizare.`,
+        title: 'File loaded in viewer!',
+        description: `${itemName} is now available for viewing.`,
         duration: 3000,
       });
 
@@ -165,10 +165,10 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
         onFileLoaded();
       }
     } catch (error) {
-      console.error('Eroare la încărcarea în viewer:', error);
+      console.error('Error loading in viewer:', error);
       toast({
-        title: 'Eroare la încărcarea în viewer',
-        description: error instanceof Error ? error.message : 'Eroare necunoscută.',
+        title: 'Error loading in viewer',
+        description: error instanceof Error ? error.message : 'Unknown error.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -180,8 +180,8 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   const handleUseFolderClick = (folder: FileItem) => {
     if (folder.type !== 'folder' || !folder.nifti_files || folder.nifti_files.length <= 1) {
       toast({
-        title: 'Folder invalid',
-        description: 'Folderul trebuie să conțină cel puțin 2 fișiere NIfTI.',
+        title: 'Invalid folder',
+        description: 'The folder must contain at least 2 NIfTI files.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -203,11 +203,11 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
       setLastKnownBackendFile(filename);
 
       toast({
-        title: 'Fișier selectat cu succes!',
-        description: `${filename} a fost încărcat și este gata pentru analiză.`,
+        title: 'File successfully selected!',
+        description: `${filename} has been loaded and is ready for analysis.`,
       });
 
-      // Închide selecția și notifică părinte
+      // Close selection and notify parent
       setShowFolderSelection(false);
       setSelectedFolder(null);
 
@@ -218,8 +218,8 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     } catch (error) {
       console.error('Error loading selected file:', error);
       toast({
-        title: 'Eroare la încărcarea fișierului',
-        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul selectat.',
+        title: 'Error loading file',
+        description: error instanceof Error ? error.message : 'Could not load the selected file.',
         variant: 'destructive',
       });
     } finally {
@@ -233,15 +233,15 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
       await deleteUploadedFile(itemName);
       setItems(items.filter(item => item.name !== itemName));
       toast({
-        title: 'Element șters',
-        description: `${itemName} a fost șters de pe server.`,
+        title: 'Item deleted',
+        description: `${itemName} has been deleted from the server.`,
         duration: 3000,
       });
     } catch (error) {
-      console.error('Eroare la ștergere:', error);
+      console.error('Error deleting:', error);
       toast({
-        title: 'Eroare la ștergere',
-        description: error instanceof Error ? error.message : 'Eroare necunoscută.',
+        title: 'Delete error',
+        description: error instanceof Error ? error.message : 'Unknown error.',
         variant: 'destructive',
         duration: 3000,
       });
@@ -251,7 +251,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   };
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString('ro-RO');
+    return new Date(timestamp * 1000).toLocaleString('en-US');
   };
 
   const getItemIcon = (item: FileItem) => {
@@ -266,22 +266,22 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
 
   const getItemDescription = (item: FileItem) => {
     if (item.type === 'folder') {
-      const niftiText = item.nifti_count === 1 ? '1 fișier NIfTI' : `${item.nifti_count} fișiere NIfTI`;
-      const totalText = item.files_count === 1 ? '1 fișier total' : `${item.files_count} fișiere total`;
+      const niftiText = item.nifti_count === 1 ? '1 NIfTI file' : `${item.nifti_count} NIfTI files`;
+      const totalText = item.files_count === 1 ? '1 total file' : `${item.files_count} total files`;
 
       let description = `${niftiText}, ${totalText}`;
 
       if (item.segmentation_ready !== undefined) {
         if (item.segmentation_ready) {
-          description += ` • Gata pentru segmentare (${item.found_modalities?.join(', ')})`;
+          description += ` • Ready for segmentation (${item.found_modalities?.join(', ')})`;
         } else if (item.missing_modalities && item.missing_modalities.length > 0) {
-          description += ` • Lipsă: ${item.missing_modalities.join(', ')}`;
+          description += ` • Missing: ${item.missing_modalities.join(', ')}`;
         }
       }
 
       return description;
     }
-    return item.extension || 'Fișier';
+    return item.extension || 'File';
   };
 
   const getSegmentationStatus = (item: FileItem) => {
@@ -293,14 +293,14 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
       return (
         <span className="flex items-center gap-1 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
           <CheckCircle className="h-3 w-3" />
-          Ready pentru AI
+          Ready for AI
         </span>
       );
     } else {
       return (
         <span className="flex items-center gap-1 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
           <AlertTriangle className="h-3 w-3" />
-          Modalități incomplete
+          Incomplete modalities
         </span>
       );
     }
@@ -326,11 +326,11 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Brain className="h-6 w-6 text-primary" />
-              Selectează Modalitatea MRI din {selectedFolder.name}
+              Select MRI Modality from {selectedFolder.name}
             </CardTitle>
             <CardDescription>
-              Folderul conține {selectedFolder.nifti_count} fișiere NIfTI.
-              Alege modalitatea pe care dorești să o vizualizezi.
+              The folder contains {selectedFolder.nifti_count} NIfTI files.
+              Choose the modality you want to view.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -370,12 +370,12 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                       {isLoading ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <RefreshCw className="h-4 w-4 animate-spin" />
-                          Se încarcă...
+                          Loading...
                         </div>
                       ) : (
                         <Button variant="outline" size="sm">
                           <Eye className="h-4 w-4 mr-1" />
-                          Selectează
+                          Select
                         </Button>
                       )}
                     </div>
@@ -393,7 +393,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                 }}
                 disabled={isLoadingSelectedFile}
               >
-                Anulează
+                Cancel
               </Button>
             </div>
           </CardContent>
@@ -414,25 +414,25 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
           className="flex items-center gap-2"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Reîmprospătează
+          Refresh
         </Button>
       </div>
 
       {loading ? (
         <div className="text-center py-8">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">Se încarcă elementele...</p>
+          <p className="text-muted-foreground">Loading items...</p>
         </div>
       ) : items.length === 0 ? (
         <div className="text-center py-8">
           <File className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-lg font-medium">Niciun element găsit</p>
-          <p className="text-muted-foreground">Nu există fișiere sau foldere pe server.</p>
+          <p className="text-lg font-medium">No items found</p>
+          <p className="text-muted-foreground">There are no files or folders on the server.</p>
         </div>
       ) : (
         <div className="space-y-3">
           <div className="text-sm text-muted-foreground mb-4">
-            {items.length} element{items.length !== 1 ? 'e' : ''} găsit{items.length !== 1 ? 'e' : ''}
+            {items.length} item{items.length !== 1 ? 's' : ''} found
           </div>
           {items.map((item) => (
             <div
@@ -463,7 +463,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Buton pentru folder usage */}
+                {/* Button for folder usage */}
                 {canUseFolder(item) && (
                   <Button
                     variant="outline"
@@ -473,11 +473,11 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                     className="flex items-center gap-1"
                   >
                     <FolderOpen className="h-3 w-3" />
-                    Folosește Folder
+                    Use Folder
                   </Button>
                 )}
 
-                {/* Buton pentru încărcarea în viewer - doar pentru fișiere NIfTI */}
+                {/* Button for loading in viewer - only for NIfTI files */}
                 {canLoadInViewer(item) && (
                   <Button
                     variant="outline"
@@ -487,7 +487,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                     className="flex items-center gap-1"
                   >
                     <Eye className="h-3 w-3" />
-                    {loadingInViewer === item.name ? 'Se încarcă...' : 'Vezi în viewer'}
+                    {loadingInViewer === item.name ? 'Loading...' : 'View in viewer'}
                   </Button>
                 )}
 
@@ -499,7 +499,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                   className="flex items-center gap-1"
                 >
                   <Download className="h-3 w-3" />
-                  {downloading === item.name ? 'Se descarcă...' : 'Descarcă'}
+                  {downloading === item.name ? 'Downloading...' : 'Download'}
                 </Button>
                 <Button
                   variant="outline"
@@ -509,7 +509,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                   className="flex items-center gap-1 text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-3 w-3" />
-                  {deleting === item.name ? 'Se șterge...' : 'Șterge'}
+                  {deleting === item.name ? 'Deleting...' : 'Delete'}
                 </Button>
               </div>
             </div>

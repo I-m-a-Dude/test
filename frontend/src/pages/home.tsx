@@ -18,10 +18,10 @@ export default function HomePage() {
   const navigate = useNavigate();
 
   const handleFileLoadedInViewer = () => {
-    // Închide dialogul File Manager
+    // Close the File Manager dialog
     setFileManagerOpen(false);
 
-    // Navighează la pagina de analiză
+    // Navigate to the analysis page
     navigate(pages.analysis);
   };
 
@@ -41,18 +41,18 @@ export default function HomePage() {
           <MriUploader onOpenFileManager={() => setFileManagerOpen(true)} />
         </div>
 
-        {/* File Manager Dialog cu callback pentru încărcarea în viewer */}
+        {/* File Manager Dialog with callback for loading into viewer */}
         <Dialog open={fileManagerOpen} onOpenChange={setFileManagerOpen}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden p-0">
             <DialogHeader className="p-6 pb-0">
               <DialogTitle className="flex items-center gap-2">
                 <FolderOpen className="h-5 w-5" />
-                Gestionarea fișierelor MRI
+                MRI File Management
               </DialogTitle>
               <DialogDescription>
-                Descarcă, șterge sau vizualizează informațiile despre fișierele încărcate pe server.
+                Download, delete, or view information about files uploaded to the server.
                 <br />
-                <strong>Tip:</strong> Folosește butonul "Vezi în viewer" pentru a încărca direct un fișier NIfTI în vizualizator.
+                <strong>Tip:</strong> Use the "View in viewer" button to directly load a NIfTI file into the viewer.
               </DialogDescription>
             </DialogHeader>
             <div className="p-6 pt-0 overflow-auto">

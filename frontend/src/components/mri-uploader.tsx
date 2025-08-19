@@ -114,8 +114,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
 
         setUploadStatus('file_selection');
         toast({
-          title: 'ZIP extractat cu succes!',
-          description: `Au fost găsite ${response.file_info.extraction.nifti_files_count} fișiere NIfTI. Alege unul pentru vizualizare.`,
+          title: 'ZIP extracted!',
+          description: `Has been found ${response.file_info.extraction.nifti_files_count} NIfTI files. Choose one to see.`,
         });
 
       } else {
@@ -125,8 +125,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
         setLastKnownBackendFile(file.name);
 
         toast({
-          title: 'Upload reușit!',
-          description: `Fișierul ${file.name} a fost trimis către server.`,
+          title: 'Upload successful',
+          description: `File ${file.name} has been sent successfully to the server.`,
         });
       }
 
@@ -137,8 +137,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
       setUploadStatus('error');
 
       toast({
-        title: 'Eroare la upload',
-        description: error instanceof Error ? error.message : 'A apărut o eroare necunoscută.',
+        title: 'Upload Error',
+        description: error instanceof Error ? error.message : 'Unknown error occurred during upload.',
         variant: 'destructive',
       });
 
@@ -161,8 +161,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
         }
       } else {
         toast({
-          title: 'Tip de fișier invalid',
-          description: 'Te rog încarcă un fișier .nii, .nii.gz sau .zip.',
+          title: 'Invalid file',
+          description: 'Please upload a .nii, .nii.gz or .zip file.',
           variant: 'destructive',
         });
       }
@@ -183,8 +183,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
       setAnalysisResult(null, null);
 
       toast({
-        title: 'Fișier selectat cu succes!',
-        description: `${filename} a fost încărcat și este gata pentru analiză.`,
+        title: 'File loaded!',
+        description: `${filename} has been loaded successfully. And ready to analyze.`,
       });
 
       // Reset upload status to success
@@ -193,8 +193,8 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     } catch (error) {
       console.error('Error loading selected file:', error);
       toast({
-        title: 'Eroare la încărcarea fișierului',
-        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul selectat.',
+        title: 'Error loading selected file',
+        description: error instanceof Error ? error.message : 'Failed to load selected file.',
         variant: 'destructive',
       });
     } finally {
@@ -210,14 +210,14 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
       setAnalysisResult(null, null);
 
       toast({
-        title: 'Fișier încărcat!',
-        description: `${filename} a fost încărcat din server.`,
+        title: 'File uploaded!',
+        description: `${filename} has been uploaded successfully.`,
       });
     } catch (error) {
       setUploadStatus('error');
       toast({
-        title: 'Eroare la încărcare',
-        description: error instanceof Error ? error.message : 'Nu s-a putut încărca fișierul.',
+        title: 'Error loading file',
+        description: error instanceof Error ? error.message : 'Failed to load file from backend.',
         variant: 'destructive',
       });
     }
@@ -307,13 +307,13 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
 
     switch (uploadStatus) {
       case 'uploading':
-        return 'Se încarcă pe server...';
+        return 'Loading on server...';
       case 'success':
-        return 'Încărcat cu succes';
+        return 'Upload successful';
       case 'error':
-        return 'Eroare la încărcare';
+        return 'Upload failed';
       case 'file_selection':
-        return 'Selectează fișierul pentru vizualizare';
+        return 'Select a file to view';
       default:
         return '';
     }
@@ -348,11 +348,11 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Brain className="h-6 w-6 text-primary" />
-              Selectează Modalitatea MRI
+              Choose the MRI modality to view
             </CardTitle>
             <CardDescription>
-              Au fost găsite {extraction.nifti_files_count} fișiere NIfTI în arhiva ZIP.
-              Alege modalitatea pe care dorești să o vizualizezi.
+              It has been found {extraction.nifti_files_count} NIfTI files in the ZIP.
+              Please select a file to view.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -392,12 +392,12 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                       {isLoading ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Se încarcă...
+                          Loading...
                         </div>
                       ) : (
                         <Button variant="outline" size="sm">
                           <Eye className="h-4 w-4 mr-1" />
-                          Selectează
+                          Select
                         </Button>
                       )}
                     </div>
@@ -413,7 +413,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                 disabled={isLoadingSelectedFile}
               >
                 <X className="h-4 w-4 mr-2" />
-                Anulează și încarcă alt fișier
+                Cancel and upload new file
               </Button>
             </div>
           </CardContent>
@@ -454,12 +454,12 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                 />
               </div>
               <p className="text-lg font-semibold text-foreground">
-                {isDragging ? 'Eliberează fișierul aici!' : 'Încarcă scanul MRI'}
+                {isDragging ? 'Release the file here' : 'Load the MRI file'}
               </p>
               <p className="text-muted-foreground text-sm mt-1">
-                Drag & drop sau click pentru a selecta un fișier
+                Drag & drop or click to select a file
               </p>
-              <p className="text-xs text-muted-foreground mt-4">Fișiere .nii, .nii.gz sau .zip</p>
+              <p className="text-xs text-muted-foreground mt-4">Files .nii, .nii.gz or .zip</p>
 
               <div className="mt-6 flex flex-col gap-2">
                 {onOpenFileManager && (
@@ -470,7 +470,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                     className="flex items-center gap-2"
                   >
                     <FolderOpen className="h-4 w-4" />
-                    Vezi fișierele de pe server
+                    View File Manager
                   </Button>
                 )}
 
@@ -483,7 +483,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
                     disabled={isLoadingFromBackend}
                   >
                     <Download className="h-4 w-4" />
-                    Reîncarcă {lastKnownBackendFile}
+                    Reload {lastKnownBackendFile}
                   </Button>
                 )}
               </div>
@@ -549,7 +549,7 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
             className="rounded-full"
           >
             {isNavigating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isNavigating ? 'Se procesează...' : 'Mergi la Analiză'}
+            {isNavigating ? 'Processing...' : 'Go to analysis'}
           </Button>
         </div>
       )}
