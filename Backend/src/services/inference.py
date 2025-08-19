@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Serviciu de inferență pentru segmentarea gliomelor post-tratament
+Serviciu de inferenta pentru segmentarea gliomelor post-tratament
 Pipeline complet: preprocess -> inference -> postprocess
 """
 import torch
@@ -21,7 +21,7 @@ except ImportError:
 
 
 class GliomaInferenceService:
-    """Serviciu complet de inferență pentru gliome"""
+    """Serviciu complet de inferenta pentru gliome"""
 
     def __init__(self):
         if not ML_AVAILABLE:
@@ -35,17 +35,17 @@ class GliomaInferenceService:
                                save_result: bool = True,
                                output_dir: Optional[Path] = None) -> Dict[str, Any]:
         """
-        Pipeline complet de inferență
+        Pipeline complet de inferenta
 
         Args:
-            folder_path: Folder cu modalitățile (t1n, t1c, t2w, t2f)
-            save_result: Dacă să salveze rezultatul ca NIfTI
-            output_dir: Directorul pentru salvare (opțional)
+            folder_path: Folder cu modalitatile (t1n, t1c, t2w, t2f)
+            save_result: Daca sa salveze rezultatul ca NIfTI
+            output_dir: Directorul pentru salvare (optional)
 
         Returns:
             Dict cu rezultatele complete
         """
-        print(f"Start pipeline inferență pentru: {folder_path.name}")
+        print(f"Start pipeline inferenta pentru: {folder_path.name}")
         start_time = time.time()
 
         try:
@@ -56,45 +56,45 @@ class GliomaInferenceService:
             preprocess_time = time.time() - preprocess_start
 
             image_tensor = preprocessed_data["image_tensor"]
-            print(f"Preprocesare completă: {preprocess_time:.2f}s")
+            print(f"Preprocesare completa: {preprocess_time:.2f}s")
             print(f"   Shape: {list(image_tensor.shape)}")
 
             # 2. INFERENCE
-            print("Etapa 2: Inferență model...")
+            print("Etapa 2: Inferenta model...")
 
-            # Asigură că modelul e încărcat
+            # Asigura ca modelul e incarcat
             if not self.model_wrapper.is_loaded:
-                print("   Încarcă model...")
+                print("   incarca model...")
                 ensure_model_loaded()
 
             inference_start = time.time()
 
-            # Adaugă dimensiunea batch dacă lipsește
+            # Adauga dimensiunea batch daca lipseste
             if image_tensor.dim() == 4:  # (C, H, W, D)
                 image_tensor = image_tensor.unsqueeze(0)  # (1, C, H, W, D)
 
-            # Rulează inferența
+            # Ruleaza inferenta
             with torch.no_grad():
                 predictions = self.model_wrapper.predict(image_tensor)
 
             inference_time = time.time() - inference_start
-            print(f"Inferență completă: {inference_time:.2f}s")
+            print(f"Inferenta completa: {inference_time:.2f}s")
             print(f"   Output shape: {list(predictions.shape)}")
 
             # 3. POSTPROCESS
             print("Etapa 3: Postprocesare...")
             postprocess_start = time.time()
 
-            # Elimină dimensiunea batch pentru postprocesare
+            # Elimina dimensiunea batch pentru postprocesare
             if predictions.dim() == 5:  # (1, C, H, W, D)
                 predictions = predictions.squeeze(0)  # (C, H, W, D)
 
             segmentation, postprocess_stats = self.postprocessor.postprocess_segmentation(predictions)
             postprocess_time = time.time() - postprocess_start
 
-            print(f"Postprocesare completă: {postprocess_time:.2f}s")
+            print(f"Postprocesare completa: {postprocess_time:.2f}s")
 
-            # 4. SALVARE (opțional)
+            # 4. SALVARE (optional)
             saved_path = None
             if save_result:
                 print("Etapa 4: Salvare rezultat...")
@@ -103,10 +103,10 @@ class GliomaInferenceService:
                     output_dir = Path("results")
                     output_dir.mkdir(exist_ok=True)
 
-                # FIXED: Format nou pentru nume fișier (folder-seg.nii.gz)
+                # FIXED: Format nou pentru nume fisier (folder-seg.nii.gz)
                 output_path = output_dir / f"{folder_path.name}-seg.nii.gz"
 
-                # Folosește primul fișier găsit ca referință pentru header
+                # Foloseste primul fisier gasit ca referinta pentru header
                 reference_nifti = None
                 original_paths = preprocessed_data.get("original_paths", {})
                 if original_paths:
@@ -120,7 +120,7 @@ class GliomaInferenceService:
             # Timing total
             total_time = time.time() - start_time
 
-            # Rezultat complet - FIXED: asigură tipuri Python native pentru JSON
+            # Rezultat complet - FIXED: asigura tipuri Python native pentru JSON
             result = {
                 "success": True,
                 "folder_name": folder_path.name,
@@ -138,10 +138,10 @@ class GliomaInferenceService:
                 },
                 "preprocessing_config": preprocessed_data["preprocessing_config"],
                 "saved_path": str(saved_path) if saved_path else None,
-                "segmentation_array": segmentation  # Pentru utilizare ulterioară
+                "segmentation_array": segmentation  # Pentru utilizare ulterioara
             }
 
-            print(f"Pipeline complet în {total_time:.2f}s")
+            print(f"Pipeline complet in {total_time:.2f}s")
             print(
                 f"   Preprocess: {preprocess_time:.1f}s | Inference: {inference_time:.1f}s | Postprocess: {postprocess_time:.1f}s")
 
@@ -149,7 +149,7 @@ class GliomaInferenceService:
 
         except Exception as e:
             error_time = time.time() - start_time
-            print(f"Eroare în pipeline după {error_time:.2f}s: {str(e)}")
+            print(f"Eroare in pipeline dupa {error_time:.2f}s: {str(e)}")
 
             return {
                 "success": False,
@@ -161,7 +161,7 @@ class GliomaInferenceService:
     def run_inference_from_preprocessed(self, preprocessed_tensor: torch.Tensor,
                                         folder_name: str = "unknown") -> Dict[str, Any]:
         """
-        Rulează doar inferență + postprocesare pe date deja preprocesate
+        Ruleaza doar inferenta + postprocesare pe date deja preprocesate
 
         Args:
             preprocessed_tensor: Tensor deja preprocesат (C, H, W, D)
@@ -170,19 +170,19 @@ class GliomaInferenceService:
         Returns:
             Dict cu rezultatele
         """
-        print(f"Inferență directă pentru: {folder_name}")
+        print(f"Inferenta directa pentru: {folder_name}")
         start_time = time.time()
 
         try:
-            # Asigură că modelul e încărcat
+            # Asigura ca modelul e incarcat
             if not self.model_wrapper.is_loaded:
                 ensure_model_loaded()
 
-            # Adaugă batch dimension
+            # Adauga batch dimension
             if preprocessed_tensor.dim() == 4:
                 preprocessed_tensor = preprocessed_tensor.unsqueeze(0)
 
-            # Inferență
+            # Inferenta
             with torch.no_grad():
                 predictions = self.model_wrapper.predict(preprocessed_tensor)
 
@@ -214,19 +214,19 @@ class GliomaInferenceService:
             }
 
 
-# Funcții utilitare
+# Functii utilitare
 def create_inference_service() -> GliomaInferenceService:
-    """Creează serviciu de inferență"""
+    """Creeaza serviciu de inferenta"""
     return GliomaInferenceService()
 
 
 def run_inference_on_folder(folder_path: Path, save_result: bool = True) -> Dict[str, Any]:
     """
-    Funcție rapidă pentru inferență completă pe un folder
+    Functie rapida pentru inferenta completa pe un folder
 
     Args:
-        folder_path: Folder cu modalitățile
-        save_result: Dacă să salveze rezultatul
+        folder_path: Folder cu modalitatile
+        save_result: Daca sa salveze rezultatul
 
     Returns:
         Dict cu rezultatele
@@ -238,7 +238,7 @@ def run_inference_on_folder(folder_path: Path, save_result: bool = True) -> Dict
 def run_inference_on_preprocessed(preprocessed_tensor: torch.Tensor,
                                   folder_name: str = "unknown") -> Dict[str, Any]:
     """
-    Funcție rapidă pentru inferență pe date preprocesate
+    Functie rapida pentru inferenta pe date preprocesate
 
     Args:
         preprocessed_tensor: Tensor preprocesат
@@ -251,12 +251,12 @@ def run_inference_on_preprocessed(preprocessed_tensor: torch.Tensor,
     return service.run_inference_from_preprocessed(preprocessed_tensor, folder_name)
 
 
-# Instanță globală
+# Instanta globala
 _inference_service = None
 
 
 def get_inference_service() -> GliomaInferenceService:
-    """Returnează instanța globală a serviciului de inferență"""
+    """Returneaza instanta globala a serviciului de inferenta"""
     global _inference_service
     if _inference_service is None:
         _inference_service = create_inference_service()

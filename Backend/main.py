@@ -8,7 +8,7 @@ import atexit
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import configurări
+# Import configurari
 from src.core.config import (
     APP_NAME, VERSION, DESCRIPTION,
     HOST, PORT, RELOAD,
@@ -36,8 +36,8 @@ if sys.platform.startswith('win'):
 
 
 def cleanup_resources():
-    """Funcție de cleanup la închiderea aplicației"""
-    print("\n[SHUTDOWN] Cleanup resurse la închiderea aplicației...")
+    """Functie de cleanup la inchiderea aplicatiei"""
+    print("\n[SHUTDOWN] Cleanup resurse la inchiderea aplicatiei...")
 
     if ML_CLEANUP_AVAILABLE and force_global_cleanup:
         try:
@@ -46,20 +46,20 @@ def cleanup_resources():
         except Exception as e:
             print(f"[SHUTDOWN] Eroare la cleanup ML: {str(e)}")
 
-    print("[SHUTDOWN] Aplikația s-a închis cu succes")
+    print("[SHUTDOWN] Aplikatia s-a inchis cu succes")
 
 
 def signal_handler(signum, frame):
-    """Handler pentru semnale de închidere"""
+    """Handler pentru semnale de inchidere"""
     print(f"\n[SHUTDOWN] Semnal primit: {signum}")
     cleanup_resources()
     sys.exit(0)
 
 
-# Înregistrează cleanup-ul pentru diferite moduri de închidere
+# inregistreaza cleanup-ul pentru diferite moduri de inchidere
 atexit.register(cleanup_resources)
 signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-signal.signal(signal.SIGTERM, signal_handler)  # Închidere normală
+signal.signal(signal.SIGTERM, signal_handler)  # inchidere normala
 
 # Windows specific
 if sys.platform.startswith('win'):
@@ -68,14 +68,14 @@ if sys.platform.startswith('win'):
     except AttributeError:
         pass
 
-# Creează aplicația FastAPI
+# Creeaza aplicatia FastAPI
 app = FastAPI(
     title=APP_NAME,
     version=VERSION,
     description=DESCRIPTION
 )
 
-# Configurează CORS
+# Configureaza CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -84,18 +84,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Adaugă endpoint-urile
+# Adauga endpoint-urile
 app.include_router(router)
 
 
-# Funcție de startup
+# Functie de startup
 @app.on_event("startup")
 async def startup_event():
     print("=" * 60)
     print(f" {APP_NAME} v{VERSION}")
     print("=" * 60)
     print(f" Director upload: {UPLOAD_DIR.absolute()}")
-    print(f" Dimensiune max fișier: {get_file_size_mb(MAX_FILE_SIZE)}")
+    print(f" Dimensiune max fisier: {get_file_size_mb(MAX_FILE_SIZE)}")
     print(f" Extensii acceptate: {', '.join(ALLOWED_EXTENSIONS)}")
     print(f" CORS origini: {', '.join(CORS_ORIGINS)}")
 
@@ -107,10 +107,10 @@ async def startup_event():
     print("=" * 60)
 
 
-# Funcție de shutdown
+# Functie de shutdown
 @app.on_event("shutdown")
 async def shutdown_event():
-    print("\n[FASTAPI SHUTDOWN] Oprirea aplicației FastAPI...")
+    print("\n[FASTAPI SHUTDOWN] Oprirea aplicatiei FastAPI...")
     cleanup_resources()
 
 
@@ -130,9 +130,9 @@ if __name__ == "__main__":
             log_level="info"
         )
     except KeyboardInterrupt:
-        print("\n[MAIN] Oprire forțată prin Ctrl+C")
+        print("\n[MAIN] Oprire fortata prin Ctrl+C")
     except Exception as e:
-        print(f"\n[MAIN] Eroare neașteptată: {str(e)}")
+        print(f"\n[MAIN] Eroare neasteptata: {str(e)}")
     finally:
         print("[MAIN] Cleanup final...")
         cleanup_resources()

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Utilități simple pentru manipularea fișierelor
+Utilitati simple pentru manipularea fisierelor
 """
 import shutil
 import zipfile
@@ -14,72 +14,72 @@ from src.utils.nifti_validation import validate_segmentation_files, get_validati
 
 
 def is_allowed_file(filename: str) -> bool:
-    """Verifică dacă fișierul are o extensie permisă"""
+    """Verifica daca fisierul are o extensie permisa"""
     return any(filename.lower().endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
 
 def is_nifti_file(filename: str) -> bool:
-    """Verifică dacă fișierul este NIfTI"""
+    """Verifica daca fisierul este NIfTI"""
     return filename.lower().endswith('.nii') or filename.lower().endswith('.nii.gz')
 
 
 def extract_zip_file(zip_path: Path) -> Dict:
     """
-    Extrage un fișier ZIP și returnează informații despre fișierele extrase
+    Extrage un fisier ZIP si returneaza informatii despre fisierele extrase
 
     Args:
-        zip_path: Calea către fișierul ZIP
+        zip_path: Calea catre fisierul ZIP
 
     Returns:
-        Dict cu informații despre extragere
+        Dict cu informatii despre extragere
 
     Raises:
-        Exception: Dacă extragerea eșuează
+        Exception: Daca extragerea esueaza
     """
     try:
-        # Creează numele folderului bazat pe numele ZIP-ului
-        folder_name = zip_path.stem  # numele fișierului fără extensie
+        # Creeaza numele folderului bazat pe numele ZIP-ului
+        folder_name = zip_path.stem  # numele fisierului fara extensie
         extract_dir = UPLOAD_DIR / folder_name
 
-        # Dacă folderul există deja, adaugă un suffix numeric
+        # Daca folderul exista deja, adauga un suffix numeric
         counter = 1
         original_extract_dir = extract_dir
         while extract_dir.exists():
             extract_dir = UPLOAD_DIR / f"{original_extract_dir.name}_{counter}"
             counter += 1
 
-        # Creează folderul de destinație
+        # Creeaza folderul de destinatie
         extract_dir.mkdir(exist_ok=True)
 
         extracted_files = []
         nifti_files = []
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            # Listează conținutul ZIP-ului
+            # Listeaza continutul ZIP-ului
             file_list = zip_ref.namelist()
 
-            print(f"[INFO] ZIP conține {len(file_list)} fișiere")
+            print(f"[INFO] ZIP contine {len(file_list)} fisiere")
 
             for file_info in zip_ref.infolist():
-                # Ignoră directoarele
+                # Ignora directoarele
                 if file_info.is_dir():
                     continue
 
                 filename = os.path.basename(file_info.filename)
 
-                # Ignoră fișierele ascunse și fișierele sistem
+                # Ignora fisierele ascunse si fisierele sistem
                 if filename.startswith('.') or filename.startswith('__'):
                     continue
 
-                # Extrage doar fișierele care au nume valid
+                # Extrage doar fisierele care au nume valid
                 if filename and len(filename) > 0:
-                    # Citește conținutul fișierului
+                    # Citeste continutul fisierului
                     file_data = zip_ref.read(file_info.filename)
 
-                    # Salvează fișierul în folderul de destinație
+                    # Salveaza fisierul in folderul de destinatie
                     output_path = extract_dir / filename
 
-                    # Dacă fișierul există deja, adaugă un suffix
+                    # Daca fisierul exista deja, adauga un suffix
                     counter = 1
                     original_output_path = output_path
                     while output_path.exists():
@@ -99,16 +99,16 @@ def extract_zip_file(zip_path: Path) -> Dict:
                         "size_mb": get_file_size_mb(file_size)
                     })
 
-                    # Verifică dacă este fișier NIfTI
+                    # Verifica daca este fisier NIfTI
                     if is_nifti_file(output_path.name):
                         nifti_files.append(output_path.name)
 
                     print(f"[INFO] Extras: {output_path.name} ({get_file_size_mb(file_size)})")
 
-        # Șterge fișierul ZIP original după extragere
+        # sterge fisierul ZIP original dupa extragere
         zip_path.unlink()
 
-        # Validează dacă folderul conține fișierele necesare pentru segmentare
+        # Valideaza daca folderul contine fisierele necesare pentru segmentare
         validation_result = validate_segmentation_files(extract_dir)
         validation_summary = get_validation_summary(extract_dir)
 
@@ -128,15 +128,15 @@ def extract_zip_file(zip_path: Path) -> Dict:
             }
         }
 
-        print(f"[SUCCESS] ZIP extras cu succes: {len(extracted_files)} fișiere, {len(nifti_files)} NIfTI")
+        print(f"[SUCCESS] ZIP extras cu succes: {len(extracted_files)} fisiere, {len(nifti_files)} NIfTI")
         print(f"[VALIDATION] {validation_summary}")
 
         return result
 
     except zipfile.BadZipFile:
-        raise Exception("Fișierul ZIP este corupt sau invalid")
+        raise Exception("Fisierul ZIP este corupt sau invalid")
     except Exception as e:
-        # Curăță folderul parțial creat în caz de eroare
+        # Curata folderul partial creat in caz de eroare
         if 'extract_dir' in locals() and extract_dir.exists():
             try:
                 shutil.rmtree(extract_dir)
@@ -147,64 +147,64 @@ def extract_zip_file(zip_path: Path) -> Dict:
 
 def validate_file(file: UploadFile) -> None:
     """
-    Validează un fișier încărcat
+    Valideaza un fisier incarcat
 
     Args:
-        file: Fișierul de validat
+        file: Fisierul de validat
 
     Raises:
-        HTTPException: Dacă validarea eșuează
+        HTTPException: Daca validarea esueaza
     """
-    # Verifică numele
+    # Verifica numele
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Fișierul trebuie să aibă un nume")
+        raise HTTPException(status_code=400, detail="Fisierul trebuie sa aiba un nume")
 
-    # Verifică extensia
+    # Verifica extensia
     if not is_allowed_file(file.filename):
         allowed = ', '.join(ALLOWED_EXTENSIONS)
         raise HTTPException(
             status_code=400,
-            detail=f"Doar fișiere {allowed} sunt acceptate"
+            detail=f"Doar fisiere {allowed} sunt acceptate"
         )
 
-    # Verifică dimensiunea
+    # Verifica dimensiunea
     if file.size and file.size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
-            detail=f"Fișierul este prea mare (max {get_file_size_mb(MAX_FILE_SIZE)})"
+            detail=f"Fisierul este prea mare (max {get_file_size_mb(MAX_FILE_SIZE)})"
         )
 
 
 async def save_file(file: UploadFile) -> Dict:
     """
-    Salvează un fișier încărcat (și îl dezarhivează dacă este ZIP)
+    Salveaza un fisier incarcat (si il dezarhiveaza daca este ZIP)
 
     Args:
-        file: Fișierul de salvat
+        file: Fisierul de salvat
 
     Returns:
-        Dict cu informații despre fișier sau extragere
+        Dict cu informatii despre fisier sau extragere
 
     Raises:
-        HTTPException: Dacă salvarea eșuează
+        HTTPException: Daca salvarea esueaza
     """
     try:
         file_path = UPLOAD_DIR / file.filename
 
-        # Salvează fișierul
+        # Salveaza fisierul
         with open(file_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
 
-        # Verifică că s-a salvat corect
+        # Verifica ca s-a salvat corect
         if not file_path.exists():
-            raise Exception("Fișierul nu a fost salvat corect")
+            raise Exception("Fisierul nu a fost salvat corect")
 
         actual_size = file_path.stat().st_size
 
-        # Dacă este ZIP, îl dezarhivează
+        # Daca este ZIP, il dezarhiveaza
         if file.filename.lower().endswith('.zip'):
-            print(f"[INFO] Detectat fișier ZIP, se dezarhivează...")
+            print(f"[INFO] Detectat fisier ZIP, se dezarhiveaza...")
 
             try:
                 extraction_result = extract_zip_file(file_path)
@@ -219,8 +219,8 @@ async def save_file(file: UploadFile) -> Dict:
                 }
 
             except Exception as e:
-                # Dacă extragerea eșuează, păstrează ZIP-ul original
-                print(f"[WARNING] Extragerea ZIP a eșuat: {str(e)}")
+                # Daca extragerea esueaza, pastreaza ZIP-ul original
+                print(f"[WARNING] Extragerea ZIP a esuat: {str(e)}")
                 return {
                     "filename": file.filename,
                     "size": actual_size,
@@ -231,7 +231,7 @@ async def save_file(file: UploadFile) -> Dict:
                     "error": str(e)
                 }
 
-        # Pentru fișiere obișnuite (NIfTI)
+        # Pentru fisiere obisnuite (NIfTI)
         return {
             "filename": file.filename,
             "size": actual_size,
@@ -242,7 +242,7 @@ async def save_file(file: UploadFile) -> Dict:
         }
 
     except Exception as e:
-        # Curăță fișierul parțial dacă există
+        # Curata fisierul partial daca exista
         if 'file_path' in locals() and file_path.exists():
             try:
                 file_path.unlink()
@@ -253,14 +253,14 @@ async def save_file(file: UploadFile) -> Dict:
 
 def list_files() -> List[Dict]:
     """
-    Listează fișierele și folderele din directorul de upload
+    Listeaza fisierele si folderele din directorul de upload
 
     Returns:
-        Lista cu informații despre fișiere și foldere
+        Lista cu informatii despre fisiere si foldere
     """
     items = []
     try:
-        # Listează fișierele individuale
+        # Listeaza fisierele individuale
         for file_path in UPLOAD_DIR.glob("*.nii*"):
             if file_path.is_file():
                 stat = file_path.stat()
@@ -274,20 +274,20 @@ def list_files() -> List[Dict]:
                     "extension": file_path.suffix
                 })
 
-        # Listează folderele (create din ZIP-uri)
+        # Listeaza folderele (create din ZIP-uri)
         for folder_path in UPLOAD_DIR.iterdir():
             if folder_path.is_dir():
-                # Numără fișierele NIfTI din folder
+                # Numara fisierele NIfTI din folder
                 nifti_files = list(folder_path.glob("*.nii*"))
                 total_files = list(folder_path.glob("*"))
 
-                # Calculează dimensiunea totală a folderului
+                # Calculeaza dimensiunea totala a folderului
                 total_size = 0
                 for file in total_files:
                     if file.is_file():
                         total_size += file.stat().st_size
 
-                # Validează pentru segmentare
+                # Valideaza pentru segmentare
                 validation_result = validate_segmentation_files(folder_path)
 
                 stat = folder_path.stat()
@@ -306,36 +306,36 @@ def list_files() -> List[Dict]:
                     "missing_modalities": validation_result["missing_modalities"]
                 })
 
-        # Sortează după data modificării
+        # Sorteaza dupa data modificarii
         items.sort(key=lambda f: f["modified"], reverse=True)
 
     except Exception as e:
-        print(f"Eroare la listarea fișierelor: {e}")
+        print(f"Eroare la listarea fisierelor: {e}")
 
     return items
 
 
 def delete_file(filename: str) -> Dict:
     """
-    Șterge un fișier sau folder
+    sterge un fisier sau folder
 
     Args:
-        filename: Numele fișierului/folderului de șters
+        filename: Numele fisierului/folderului de sters
 
     Returns:
-        Dict cu informații despre elementul șters
+        Dict cu informatii despre elementul sters
 
     Raises:
-        HTTPException: Dacă ștergerea eșuează
+        HTTPException: Daca stergerea esueaza
     """
     item_path = UPLOAD_DIR / filename
 
     if not item_path.exists():
-        raise HTTPException(status_code=404, detail="Fișierul sau folderul nu există")
+        raise HTTPException(status_code=404, detail="Fisierul sau folderul nu exista")
 
     try:
         if item_path.is_file():
-            # Șterge fișier
+            # sterge fisier
             file_size = item_path.stat().st_size
             item_path.unlink()
 
@@ -347,11 +347,11 @@ def delete_file(filename: str) -> Dict:
             }
 
         elif item_path.is_dir():
-            # Șterge folder și tot conținutul
+            # sterge folder si tot continutul
             total_size = 0
             file_count = 0
 
-            # Calculează dimensiunea totală înainte de ștergere
+            # Calculeaza dimensiunea totala inainte de stergere
             for file in item_path.rglob("*"):
                 if file.is_file():
                     total_size += file.stat().st_size
@@ -368,7 +368,7 @@ def delete_file(filename: str) -> Dict:
             }
 
         else:
-            raise Exception("Elementul nu este nici fișier, nici folder")
+            raise Exception("Elementul nu este nici fisier, nici folder")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Eroare la ștergere: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la stergere: {str(e)}")

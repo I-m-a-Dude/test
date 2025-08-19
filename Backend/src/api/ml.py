@@ -19,12 +19,12 @@ router = APIRouter(prefix="/ml", tags=["Machine Learning"])
 @router.get("/status")
 async def get_ml_status():
     """
-    Verifică statusul sistemului ML
+    Verifica statusul sistemului ML
     """
     if not ML_AVAILABLE:
         return {
             "ml_available": False,
-            "error": "Dependențele ML nu sunt instalate",
+            "error": "Dependentele ML nu sunt instalate",
             "required_packages": ["torch", "monai", "nibabel"]
         }
 
@@ -49,7 +49,7 @@ async def get_ml_status():
 @router.post("/load-model")
 async def load_model_endpoint():
     """
-    Încarcă modelul ML în memorie
+    incarca modelul ML in memorie
     """
     if not ML_AVAILABLE:
         raise HTTPException(
@@ -58,36 +58,36 @@ async def load_model_endpoint():
         )
 
     try:
-        print("[API] Încercare încărcare model...")
+        print("[API] incercare incarcare model...")
         success = ensure_model_loaded()
 
         if success:
             wrapper = get_model_wrapper()
             model_info = wrapper.get_model_info()
 
-            print("[API] Model încărcat cu succes!")
+            print("[API] Model incarcat cu succes!")
             return {
-                "message": "Model încărcat cu succes",
+                "message": "Model incarcat cu succes",
                 "model_info": model_info
             }
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Încărcarea modelului a eșuat"
+                detail="incarcarea modelului a esuat"
             )
 
     except Exception as e:
-        print(f"[API] Eroare la încărcarea modelului: {str(e)}")
+        print(f"[API] Eroare la incarcarea modelului: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la încărcarea modelului: {str(e)}"
+            detail=f"Eroare la incarcarea modelului: {str(e)}"
         )
 
 
 @router.post("/unload-model")
 async def unload_model_endpoint():
     """
-    Descarcă modelul din memorie pentru a elibera resurse
+    Descarca modelul din memorie pentru a elibera resurse
     """
     if not ML_AVAILABLE:
         raise HTTPException(
@@ -98,33 +98,33 @@ async def unload_model_endpoint():
     try:
         from src.ml import unload_global_model
 
-        print("[API] Încercare descărcare model...")
+        print("[API] incercare descarcare model...")
         success = unload_global_model()
 
         if success:
-            print("[API] Model descărcat cu succes!")
+            print("[API] Model descarcat cu succes!")
             return {
-                "message": "Model descărcat cu succes",
+                "message": "Model descarcat cu succes",
                 "memory_freed": True
             }
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Descărcarea modelului a eșuat"
+                detail="Descarcarea modelului a esuat"
             )
 
     except Exception as e:
-        print(f"[API] Eroare la descărcarea modelului: {str(e)}")
+        print(f"[API] Eroare la descarcarea modelului: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la descărcarea modelului: {str(e)}"
+            detail=f"Eroare la descarcarea modelului: {str(e)}"
         )
 
 
 @router.get("/memory-usage")
 async def get_memory_usage():
     """
-    Verifică utilizarea memoriei pentru sistemul ML
+    Verifica utilizarea memoriei pentru sistemul ML
     """
     if not ML_AVAILABLE:
         raise HTTPException(
@@ -145,14 +145,14 @@ async def get_memory_usage():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la obținerea informațiilor despre memorie: {str(e)}"
+            detail=f"Eroare la obtinerea informatiilor despre memorie: {str(e)}"
         )
 
 
 @router.post("/cleanup")
 async def force_cleanup():
     """
-    Forțează cleanup complet al tuturor resurselor ML
+    Forteaza cleanup complet al tuturor resurselor ML
     """
     if not ML_AVAILABLE:
         raise HTTPException(
@@ -163,17 +163,17 @@ async def force_cleanup():
     try:
         from src.ml import force_global_cleanup
 
-        print("[API] Cleanup forțat al resurselor ML...")
+        print("[API] Cleanup fortat al resurselor ML...")
         force_global_cleanup()
 
         print("[API] Cleanup complet!")
         return {
-            "message": "Cleanup forțat completat cu succes",
+            "message": "Cleanup fortat completat cu succes",
             "resources_cleaned": True
         }
 
     except Exception as e:
-        print(f"[API] Eroare la cleanup forțat: {str(e)}")
+        print(f"[API] Eroare la cleanup fortat: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Eroare la cleanup: {str(e)}"

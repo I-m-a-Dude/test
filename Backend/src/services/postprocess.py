@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Postprocesare MONAI pentru segmentare gliome - versiune simplificată
+Postprocesare MONAI pentru segmentare gliome - versiune simplificata
 """
 import torch
 import numpy as np
@@ -33,7 +33,7 @@ class GliomaPostprocessor:
         }
 
     def convert_predictions_to_classes(self, predictions: torch.Tensor) -> torch.Tensor:
-        """Convertește predicții în clase discrete"""
+        """Converteste predictii in clase discrete"""
         if predictions.dim() == 4:  # (C, H, W, D)
             predictions = predictions.unsqueeze(0)
 
@@ -47,7 +47,7 @@ class GliomaPostprocessor:
         return classes
 
     def apply_morphological_cleaning(self, segmentation: np.ndarray) -> np.ndarray:
-        """Aplică operații morfologice pentru curățare"""
+        """Aplica operatii morfologice pentru curatare"""
         cleaned = segmentation.copy()
 
         for class_id in range(1, 5):
@@ -69,7 +69,7 @@ class GliomaPostprocessor:
         return cleaned
 
     def remove_small_components(self, segmentation: np.ndarray) -> np.ndarray:
-        """Elimină componentele conexe mici"""
+        """Elimina componentele conexe mici"""
         filtered = segmentation.copy()
 
         for class_id in range(1, 5):
@@ -92,15 +92,15 @@ class GliomaPostprocessor:
 
     def postprocess_segmentation(self, predictions: torch.Tensor) -> Tuple[np.ndarray, Dict]:
         """Pipeline complet de postprocesare"""
-        # Convertește în clase
+        # Converteste in clase
         classes = self.convert_predictions_to_classes(predictions)
         segmentation = classes.cpu().numpy() if isinstance(classes, torch.Tensor) else classes
 
-        # Aplică postprocesare
+        # Aplica postprocesare
         segmentation = self.apply_morphological_cleaning(segmentation)
         segmentation = self.remove_small_components(segmentation)
 
-        # Statistici - FIXED: convertește toate valorile numpy în tipuri Python
+        # Statistici - FIXED: converteste toate valorile numpy in tipuri Python
         unique_classes, counts = np.unique(segmentation, return_counts=True)
         class_stats = {int(cls): int(count) for cls, count in zip(unique_classes, counts)}
 
@@ -116,7 +116,7 @@ class GliomaPostprocessor:
 
     def save_as_nifti(self, segmentation: np.ndarray, output_path: Path,
                       reference_nifti: Optional[Path] = None) -> Path:
-        """Salvează segmentarea ca NIfTI"""
+        """Salveaza segmentarea ca NIfTI"""
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if reference_nifti and reference_nifti.exists():
@@ -129,14 +129,14 @@ class GliomaPostprocessor:
         return output_path
 
 
-# Funcții utilitare
+# Functii utilitare
 def create_postprocessor() -> GliomaPostprocessor:
-    """Creează instanță postprocessor"""
+    """Creeaza instanta postprocessor"""
     return GliomaPostprocessor()
 
 
 def quick_postprocess(predictions: torch.Tensor, output_path: Path = None) -> Tuple[np.ndarray, Dict]:
-    """Postprocesare rapidă"""
+    """Postprocesare rapida"""
     processor = create_postprocessor()
     segmentation, stats = processor.postprocess_segmentation(predictions)
 
@@ -146,12 +146,12 @@ def quick_postprocess(predictions: torch.Tensor, output_path: Path = None) -> Tu
     return segmentation, stats
 
 
-# Instanță globală
+# Instanta globala
 _postprocessor = None
 
 
 def get_postprocessor() -> GliomaPostprocessor:
-    """Returnează instanța globală a postprocessor-ului"""
+    """Returneaza instanta globala a postprocessor-ului"""
     global _postprocessor
     if _postprocessor is None:
         _postprocessor = create_postprocessor()

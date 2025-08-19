@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Serviciu de preprocesare pentru fișiere NIfTI folosind MONAI
-Adaptează pipeline-ul pentru inferența (validation/testing mode)
+Serviciu de preprocesare pentru fisiere NIfTI folosind MONAI
+Adapteaza pipeline-ul pentru inferenta (validation/testing mode)
 """
 import torch
 import numpy as np
@@ -20,7 +20,7 @@ try:
 
     MONAI_AVAILABLE = True
 except ImportError as e:
-    print(f"AVERTISMENT: MONAI sau dependențele nu sunt disponibile: {e}")
+    print(f"AVERTISMENT: MONAI sau dependentele nu sunt disponibile: {e}")
     MONAI_AVAILABLE = False
 
 from src.core.config import (
@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 class NIfTIPreprocessor:
     """
-    Preprocesorul pentru fișiere NIfTI folosind MONAI transforms
-    Adaptează pipeline-ul pentru inferența (fără augmentări)
+    Preprocesorul pentru fisiere NIfTI folosind MONAI transforms
+    Adapteaza pipeline-ul pentru inferenta (fara augmentari)
     """
 
     def __init__(self):
@@ -43,39 +43,39 @@ class NIfTIPreprocessor:
         self.is_initialized = False
 
         if not MONAI_AVAILABLE:
-            raise ImportError("MONAI nu este disponibil. Instalează cu: pip install monai")
+            raise ImportError("MONAI nu este disponibil. Instaleaza cu: pip install monai")
 
         self._create_transforms()
 
     def _create_transforms(self) -> None:
         """
-        Creează pipeline-ul de transforms pentru inferență
-        Bazat pe funcția create_transforms cu is_train=False
+        Creeaza pipeline-ul de transforms pentru inferenta
+        Bazat pe functia create_transforms cu is_train=False
         """
         try:
-            print("[PREPROCESS] Creează pipeline transforms pentru inferență...")
+            print("[PREPROCESS] Creeaza pipeline transforms pentru inferenta...")
 
-            # Define keys pentru transformări (4 modalități)
+            # Define keys pentru transformari (4 modalitati)
             image_keys = ["image_t1n", "image_t1c", "image_t2w", "image_t2f"]
-            all_keys = image_keys  # Pentru inferență nu avem segmentare
+            all_keys = image_keys  # Pentru inferenta nu avem segmentare
 
-            # ========== TRANSFORMS COMUNE (ca în funcția ta) ==========
+            # ========== TRANSFORMS COMUNE (ca in functia ta) ==========
 
             common_transforms = [
-                # Încarcă imaginile din fișiere NIfTI
+                # incarca imaginile din fisiere NIfTI
                 LoadImaged(keys=all_keys),
 
-                # Asigură formatul channel-first (BCHWD pentru MONAI)
+                # Asigura formatul channel-first (BCHWD pentru MONAI)
                 EnsureChannelFirstd(keys=all_keys),
 
-                # Standardizează voxel spacing la (1.0, 1.0, 1.0) mm
+                # Standardizeaza voxel spacing la (1.0, 1.0, 1.0) mm
                 Spacingd(
                     keys=all_keys,
                     pixdim=SPACING,
                     mode=["bilinear"] * len(image_keys),  # bilinear pentru toate imaginile
                 ),
 
-                # Asigură orientarea consistentă "RAI"
+                # Asigura orientarea consistenta "RAI"
                 Orientationd(
                     keys=all_keys,
                     axcodes=ORIENTATION,
@@ -85,7 +85,7 @@ class NIfTIPreprocessor:
             # ========== NORMALIZARE INTENSITATE ==========
 
             intensity_transforms = [
-                # Normalizează intensitatea pentru fiecare modalitate
+                # Normalizeaza intensitatea pentru fiecare modalitate
                 ScaleIntensityRanged(
                     keys=["image_t1n"],
                     a_min=INTENSITY_RANGES["t1n"]["a_min"],
@@ -120,31 +120,31 @@ class NIfTIPreprocessor:
                 ),
             ]
 
-            # ========== TRANSFORMS SPAȚIALE (pentru inferență) ==========
+            # ========== TRANSFORMS SPAtIALE (pentru inferenta) ==========
 
             spatial_transforms = [
                 # Crop background folosind imaginea T1n pentru identificarea creierului
                 CropForegroundd(
                     keys=all_keys,
-                    source_key="image_t1n",  # Folosește T1n pentru identificarea creierului
-                    margin=10,  # Margine mică pentru tot creierul
+                    source_key="image_t1n",  # Foloseste T1n pentru identificarea creierului
+                    margin=10,  # Margine mica pentru tot creierul
                 ),
 
-                # Resize la dimensiunea consistentă pentru inferență
+                # Resize la dimensiunea consistenta pentru inferenta
                 ResizeWithPadOrCropd(
                     keys=all_keys,
                     spatial_size=IMG_SIZE,
                 ),
 
-                # Concatenează cele 4 modalități într-un tensor multi-channel
+                # Concateneaza cele 4 modalitati intr-un tensor multi-channel
                 ConcatItemsd(
                     keys=image_keys,
                     name="image",
-                    dim=0,  # Concatenează pe dimensiunea channel-urilor
+                    dim=0,  # Concateneaza pe dimensiunea channel-urilor
                 ),
             ]
 
-            # ========== CONVERSIE FINALĂ ==========
+            # ========== CONVERSIE FINALa ==========
 
             type_transforms = [
                 EnsureTyped(
@@ -153,7 +153,7 @@ class NIfTIPreprocessor:
                 )
             ]
 
-            # ========== COMBINĂ TOATE TRANSFORMS ==========
+            # ========== COMBINa TOATE TRANSFORMS ==========
 
             self.transforms = Compose(
                 common_transforms +
@@ -164,7 +164,7 @@ class NIfTIPreprocessor:
 
             self.is_initialized = True
             print("[PREPROCESS] Pipeline transforms creat cu succes!")
-            print(f"    - Dimensiune finală: {IMG_SIZE}")
+            print(f"    - Dimensiune finala: {IMG_SIZE}")
             print(f"    - Spacing: {SPACING}")
             print(f"    - Orientare: {ORIENTATION}")
             print(f"    - Canale output: {NUM_CHANNELS}")
@@ -175,33 +175,33 @@ class NIfTIPreprocessor:
 
     def preprocess_folder(self, folder_path: Path) -> Dict[str, Any]:
         """
-        Preprocesează toate fișierele dintr-un folder validat
+        Preproceseaza toate fisierele dintr-un folder validat
 
         Args:
-            folder_path: Calea către folderul cu modalitățile validate
+            folder_path: Calea catre folderul cu modalitatile validate
 
         Returns:
-            Dict cu datele preprocesate și metadata
+            Dict cu datele preprocesate si metadata
 
         Raises:
-            ValueError: Dacă folderul nu conține modalitățile necesare
-            RuntimeError: Dacă preprocesarea eșuează
+            ValueError: Daca folderul nu contine modalitatile necesare
+            RuntimeError: Daca preprocesarea esueaza
         """
         if not self.is_initialized:
-            raise RuntimeError("Preprocesorul nu este inițializat")
+            raise RuntimeError("Preprocesorul nu este initializat")
 
         try:
-            print(f"[PREPROCESS] Începe preprocesarea folderului: {folder_path.name}")
+            print(f"[PREPROCESS] incepe preprocesarea folderului: {folder_path.name}")
 
-            # Obține mapping-ul modalitate -> fișier
+            # Obtine mapping-ul modalitate -> fisier
             modality_mapping = get_modality_files_mapping(folder_path)
 
             if modality_mapping is None:
-                raise ValueError(f"Folderul {folder_path.name} nu conține toate modalitățile necesare")
+                raise ValueError(f"Folderul {folder_path.name} nu contine toate modalitatile necesare")
 
-            print(f"[PREPROCESS] Modalități găsite: {list(modality_mapping.keys())}")
+            print(f"[PREPROCESS] Modalitati gasite: {list(modality_mapping.keys())}")
 
-            # Creează dicționarul pentru MONAI transforms
+            # Creeaza dictionarul pentru MONAI transforms
             data_dict = {
                 "image_t1n": str(modality_mapping["t1n"]),
                 "image_t1c": str(modality_mapping["t1c"]),
@@ -209,24 +209,24 @@ class NIfTIPreprocessor:
                 "image_t2f": str(modality_mapping["t2f"])
             }
 
-            print("[PREPROCESS] Aplică transforms...")
+            print("[PREPROCESS] Aplica transforms...")
 
-            # Aplică transforms
+            # Aplica transforms
             processed_data = self.transforms(data_dict)
 
             # Extrage tensorul final
             image_tensor = processed_data["image"]
 
-            print(f"[PREPROCESS] Preprocesare completă!")
+            print(f"[PREPROCESS] Preprocesare completa!")
             print(f"    - Shape final: {list(image_tensor.shape)}")
             print(f"    - Dtype: {image_tensor.dtype}")
             print(f"    - Device: {image_tensor.device}")
             print(f"    - Min/Max: {image_tensor.min():.3f}/{image_tensor.max():.3f}")
 
-            # Verifică shape-ul final
+            # Verifica shape-ul final
             expected_shape = (NUM_CHANNELS,) + IMG_SIZE
             if image_tensor.shape != expected_shape:
-                print(f"[WARNING] Shape neașteptat: {list(image_tensor.shape)} vs {expected_shape}")
+                print(f"[WARNING] Shape neasteptat: {list(image_tensor.shape)} vs {expected_shape}")
 
             result = {
                 "image_tensor": image_tensor,
@@ -245,32 +245,32 @@ class NIfTIPreprocessor:
 
         except Exception as e:
             logger.error(f"Eroare la preprocesarea folderului {folder_path}: {str(e)}")
-            raise RuntimeError(f"Preprocesarea a eșuat: {str(e)}")
+            raise RuntimeError(f"Preprocesarea a esuat: {str(e)}")
 
     def save_preprocessed_data(self,
                                preprocessed_data: Dict[str, Any],
                                output_path: Optional[Path] = None) -> Path:
         """
-        Salvează datele preprocesate pe disc
+        Salveaza datele preprocesate pe disc
 
         Args:
             preprocessed_data: Datele returnate de preprocess_folder()
-            output_path: Calea de salvare (opțional)
+            output_path: Calea de salvare (optional)
 
         Returns:
-            Calea către fișierul salvat
+            Calea catre fisierul salvat
         """
         try:
             if output_path is None:
                 folder_name = preprocessed_data["folder_name"]
                 output_path = TEMP_PROCESSING_DIR / f"{folder_name}_preprocessed.pt"
 
-            # Asigură că directorul există
+            # Asigura ca directorul exista
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            print(f"[PREPROCESS] Salvează datele preprocesate în: {output_path}")
+            print(f"[PREPROCESS] Salveaza datele preprocesate in: {output_path}")
 
-            # Salvează folosind torch.save
+            # Salveaza folosind torch.save
             save_data = {
                 "image_tensor": preprocessed_data["image_tensor"],
                 "metadata": {
@@ -290,42 +290,42 @@ class NIfTIPreprocessor:
 
         except Exception as e:
             logger.error(f"Eroare la salvarea datelor preprocesate: {str(e)}")
-            raise RuntimeError(f"Salvarea a eșuat: {str(e)}")
+            raise RuntimeError(f"Salvarea a esuat: {str(e)}")
 
     def load_preprocessed_data(self, file_path: Path) -> Dict[str, Any]:
         """
-        Încarcă datele preprocesate salvate anterior
+        incarca datele preprocesate salvate anterior
 
         Args:
-            file_path: Calea către fișierul .pt
+            file_path: Calea catre fisierul .pt
 
         Returns:
-            Dict cu datele încărcate
+            Dict cu datele incarcate
         """
         try:
             if not file_path.exists():
-                raise FileNotFoundError(f"Fișierul nu există: {file_path}")
+                raise FileNotFoundError(f"Fisierul nu exista: {file_path}")
 
-            print(f"[PREPROCESS] Încarcă datele preprocesate din: {file_path}")
+            print(f"[PREPROCESS] incarca datele preprocesate din: {file_path}")
 
             data = torch.load(file_path, map_location='cpu')
 
-            print(f"[PREPROCESS] Date încărcate cu succes")
+            print(f"[PREPROCESS] Date incarcate cu succes")
             print(f"    - Shape: {list(data['image_tensor'].shape)}")
             print(f"    - Folder original: {data['metadata']['folder_name']}")
 
             return data
 
         except Exception as e:
-            logger.error(f"Eroare la încărcarea datelor preprocesate: {str(e)}")
-            raise RuntimeError(f"Încărcarea a eșuat: {str(e)}")
+            logger.error(f"Eroare la incarcarea datelor preprocesate: {str(e)}")
+            raise RuntimeError(f"incarcarea a esuat: {str(e)}")
 
     def get_preprocessing_info(self) -> Dict[str, Any]:
         """
-        Returnează informații despre configurația de preprocesare
+        Returneaza informatii despre configuratia de preprocesare
 
         Returns:
-            Dict cu informații despre configurație
+            Dict cu informatii despre configuratie
         """
         return {
             "is_initialized": self.is_initialized,
@@ -338,16 +338,16 @@ class NIfTIPreprocessor:
         }
 
 
-# Instanță globală singleton
+# Instanta globala singleton
 _preprocessor = None
 
 
 def get_preprocessor() -> NIfTIPreprocessor:
     """
-    Returnează instanța globală a preprocesorului (singleton pattern)
+    Returneaza instanta globala a preprocesorului (singleton pattern)
 
     Returns:
-        Instanța NIfTIPreprocessor
+        Instanta NIfTIPreprocessor
     """
     global _preprocessor
     if _preprocessor is None:
@@ -357,10 +357,10 @@ def get_preprocessor() -> NIfTIPreprocessor:
 
 def preprocess_folder_simple(folder_path: Path) -> Dict[str, Any]:
     """
-    Funcție simplă pentru preprocesarea unui folder
+    Functie simpla pentru preprocesarea unui folder
 
     Args:
-        folder_path: Calea către folderul cu modalitățile
+        folder_path: Calea catre folderul cu modalitatile
 
     Returns:
         Dict cu datele preprocesate

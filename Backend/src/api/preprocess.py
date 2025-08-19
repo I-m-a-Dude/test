@@ -34,12 +34,12 @@ router = APIRouter(prefix="/preprocess", tags=["Preprocessing"])
 @router.get("/status")
 async def get_preprocess_status():
     """
-    Verifică statusul sistemului de preprocesare
+    Verifica statusul sistemului de preprocesare
     """
     if not SERVICE_AVAILABLE:
         return {
             "preprocess_available": False,
-            "error": "Dependențele pentru preprocesare nu sunt instalate",
+            "error": "Dependentele pentru preprocesare nu sunt instalate",
             "required_packages": ["monai", "torch", "nibabel"]
         }
 
@@ -64,7 +64,7 @@ async def get_preprocess_status():
 @router.get("/folders")
 async def get_valid_folders():
     """
-    Găsește folderele valide pentru segmentare
+    Gaseste folderele valide pentru segmentare
     """
     if not SERVICE_AVAILABLE:
         raise HTTPException(
@@ -92,14 +92,14 @@ async def get_valid_folders():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la căutarea folderelor: {str(e)}"
+            detail=f"Eroare la cautarea folderelor: {str(e)}"
         )
 
 
 @router.post("/folder/{folder_name}")
 async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
     """
-    Preprocesează un folder specific pentru inferență și salvează datele
+    Preproceseaza un folder specific pentru inferenta si salveaza datele
     """
     if not SERVICE_AVAILABLE:
         raise HTTPException(
@@ -113,23 +113,23 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
         if not folder_path.exists() or not folder_path.is_dir():
             raise HTTPException(
                 status_code=404,
-                detail=f"Folderul {folder_name} nu există"
+                detail=f"Folderul {folder_name} nu exista"
             )
 
-        print(f"[API] Încercare preprocesare folder: {folder_name}")
+        print(f"[API] incercare preprocesare folder: {folder_name}")
 
-        # Preprocesează folderul
+        # Preproceseaza folderul
         result = preprocess_folder_simple(folder_path)
 
-        # Debug: afișează cheile disponibile
-        print(f"[DEBUG] Chei disponibile în result: {list(result.keys())}")
+        # Debug: afiseaza cheile disponibile
+        print(f"[DEBUG] Chei disponibile in result: {list(result.keys())}")
 
-        # Salvează datele preprocesate dacă e solicitat
+        # Salveaza datele preprocesate daca e solicitat
         saved_path = None
         if save_data:
             import torch
 
-            # Încearcă să găsească tensorul preprocesат sub diferite chei posibile
+            # incearca sa gaseasca tensorul preprocesат sub diferite chei posibile
             preprocessed_tensor = None
             # FIXED: Added "image_tensor" to the possible keys
             possible_keys = ["image_tensor", "preprocessed_data", "data", "tensor", "processed_tensor", "output"]
@@ -137,17 +137,17 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
             for key in possible_keys:
                 if key in result:
                     preprocessed_tensor = result[key]
-                    print(f"[DEBUG] Tensorul găsit sub cheia: {key}")
+                    print(f"[DEBUG] Tensorul gasit sub cheia: {key}")
                     break
 
             if preprocessed_tensor is None:
-                # Dacă nu găsește tensorul, afișează toate valorile pentru debugging
-                print(f"[ERROR] Nu s-a găsit tensorul preprocesат. Result keys: {list(result.keys())}")
+                # Daca nu gaseste tensorul, afiseaza toate valorile pentru debugging
+                print(f"[ERROR] Nu s-a gasit tensorul preprocesат. Result keys: {list(result.keys())}")
                 for key, value in result.items():
                     print(f"[DEBUG] {key}: {type(value)} - {value if not hasattr(value, 'shape') else f'shape: {value.shape}'}")
                 raise HTTPException(
                     status_code=500,
-                    detail="Tensorul preprocesат nu a fost găsit în rezultat"
+                    detail="Tensorul preprocesат nu a fost gasit in rezultat"
                 )
 
             # Convert MetaTensor to regular tensor if needed
@@ -156,18 +156,18 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
             elif not isinstance(preprocessed_tensor, torch.Tensor):
                 preprocessed_tensor = torch.tensor(preprocessed_tensor)
 
-            # Creează directorul pentru date preprocesate
+            # Creeaza directorul pentru date preprocesate
             preprocessed_dir = TEMP_PREPROCESSING_DIR
             preprocessed_dir.mkdir(exist_ok=True)
 
-            # Salvează tensorul
+            # Salveaza tensorul
             output_path = preprocessed_dir / f"{folder_name}_preprocessed.pt"
             torch.save(preprocessed_tensor, output_path)
             saved_path = str(output_path)
 
-            print(f"[API] Date preprocesate salvate în: {saved_path}")
+            print(f"[API] Date preprocesate salvate in: {saved_path}")
 
-        # Extrage informații pentru răspuns (fără tensorul mare)
+        # Extrage informatii pentru raspuns (fara tensorul mare)
         response_data = {
             "message": f"Folder {folder_name} preprocesат cu succes",
             "folder_name": result["folder_name"],
@@ -180,7 +180,7 @@ async def preprocess_folder_endpoint(folder_name: str, save_data: bool = True):
             response_data["saved_path"] = saved_path
             response_data["saved_filename"] = f"{folder_name}_preprocessed.pt"
 
-        print(f"[API] Preprocesare completă pentru {folder_name}")
+        print(f"[API] Preprocesare completa pentru {folder_name}")
         return response_data
 
     except HTTPException:
@@ -199,10 +199,10 @@ async def visualize_preprocessed_data(filename: str,
                                       slice_index: int = None,
                                       modality: str = "all"):
     """
-    Vizualizează datele preprocesate salvate
+    Vizualizeaza datele preprocesate salvate
 
     Args:
-        filename: Numele fișierului .pt
+        filename: Numele fisierului .pt
         slice_axis: Axa pentru slice ("axial", "coronal", "sagital")
         slice_index: Indexul slice-ului (None pentru mijloc)
         modality: Modalitatea de vizualizat ("all", "t1n", "t1c", "t2w", "t2f")
@@ -228,12 +228,12 @@ async def visualize_preprocessed_data(filename: str,
         if not file_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Fișierul preprocesат {filename} nu există"
+                detail=f"Fisierul preprocesат {filename} nu exista"
             )
 
-        print(f"[VISUALIZE] Încarcă și vizualizează: {filename}")
+        print(f"[VISUALIZE] incarca si vizualizeaza: {filename}")
 
-        # Încarcă tensorul
+        # incarca tensorul
         data = torch.load(file_path, map_location='cpu')
 
         if isinstance(data, dict) and 'image_tensor' in data:
@@ -243,7 +243,7 @@ async def visualize_preprocessed_data(filename: str,
             tensor = data
             metadata = {}
 
-        # Convertește la numpy pentru matplotlib
+        # Converteste la numpy pentru matplotlib
         if hasattr(tensor, 'numpy'):
             array = tensor.numpy()
         else:
@@ -251,17 +251,17 @@ async def visualize_preprocessed_data(filename: str,
 
         print(f"[VISUALIZE] Shape tensor: {array.shape}")
 
-        # Verifică dimensiunile [4, H, W, D]
+        # Verifica dimensiunile [4, H, W, D]
         if len(array.shape) != 4 or array.shape[0] != 4:
             raise HTTPException(
                 status_code=400,
-                detail=f"Format tensor neașteptat: {array.shape}. Se așteaptă [4, H, W, D]"
+                detail=f"Format tensor neasteptat: {array.shape}. Se asteapta [4, H, W, D]"
             )
 
         channels, height, width, depth = array.shape
         modality_names = ["t1n", "t1c", "t2w", "t2f"]
 
-        # Determină indexul slice-ului
+        # Determina indexul slice-ului
         axis_mapping = {
             "axial": 2,  # slice pe axa Z (depth)
             "coronal": 1,  # slice pe axa Y (height)
@@ -271,11 +271,11 @@ async def visualize_preprocessed_data(filename: str,
         if slice_axis not in axis_mapping:
             raise HTTPException(
                 status_code=400,
-                detail=f"Axă invalidă: {slice_axis}. Opțiuni: {list(axis_mapping.keys())}"
+                detail=f"Axa invalida: {slice_axis}. Optiuni: {list(axis_mapping.keys())}"
             )
 
         axis_idx = axis_mapping[slice_axis]
-        max_slice = array.shape[axis_idx + 1]  # +1 pentru că primul index e channel-ul
+        max_slice = array.shape[axis_idx + 1]  # +1 pentru ca primul index e channel-ul
 
         if slice_index is None:
             slice_index = max_slice // 2
@@ -295,9 +295,9 @@ async def visualize_preprocessed_data(filename: str,
 
         print(f"[VISUALIZE] Slice {slice_axis} #{slice_index}, shape: {slice_data.shape}")
 
-        # Generează vizualizarea
+        # Genereaza vizualizarea
         if modality == "all":
-            # Creează o figură cu toate modalitățile
+            # Creeaza o figura cu toate modalitatile
             fig, axes = plt.subplots(2, 2, figsize=(12, 12))
             fig.suptitle(f'{filename} - {slice_axis.title()} Slice #{slice_index}', fontsize=16)
 
@@ -310,11 +310,11 @@ async def visualize_preprocessed_data(filename: str,
             plt.tight_layout()
 
         else:
-            # Vizualizează o singură modalitate
+            # Vizualizeaza o singura modalitate
             if modality not in modality_names:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Modalitate invalidă: {modality}. Opțiuni: {modality_names}"
+                    detail=f"Modalitate invalida: {modality}. Optiuni: {modality_names}"
                 )
 
             mod_idx = modality_names.index(modality)
@@ -325,14 +325,14 @@ async def visualize_preprocessed_data(filename: str,
             ax.axis('off')
             plt.colorbar(im, ax=ax)
 
-        # Convertește figura în base64
+        # Converteste figura in base64
         buffer = io.BytesIO()
         plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
         buffer.seek(0)
         image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         plt.close(fig)
 
-        # Calculează statistici pentru slice
+        # Calculeaza statistici pentru slice
         slice_stats = {}
         for i, mod_name in enumerate(modality_names):
             mod_slice = slice_data[i]
@@ -344,7 +344,7 @@ async def visualize_preprocessed_data(filename: str,
             }
 
         return {
-            "message": "Vizualizare generată cu succes",
+            "message": "Vizualizare generata cu succes",
             "filename": filename,
             "tensor_info": {
                 "shape": list(array.shape),
@@ -383,7 +383,7 @@ async def visualize_preprocessed_data(filename: str,
 @router.get("/slice-info/{filename}")
 async def get_slice_info(filename: str):
     """
-    Obține informații despre dimensiunile tensorului pentru navigare
+    Obtine informatii despre dimensiunile tensorului pentru navigare
     """
     if not SERVICE_AVAILABLE:
         raise HTTPException(
@@ -400,10 +400,10 @@ async def get_slice_info(filename: str):
         if not file_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Fișierul preprocesат {filename} nu există"
+                detail=f"Fisierul preprocesат {filename} nu exista"
             )
 
-        # Încarcă doar header-ul pentru informații rapide
+        # incarca doar header-ul pentru informatii rapide
         data = torch.load(file_path, map_location='cpu')
 
         if isinstance(data, dict) and 'image_tensor' in data:
@@ -418,7 +418,7 @@ async def get_slice_info(filename: str):
         if len(shape) != 4 or shape[0] != 4:
             raise HTTPException(
                 status_code=400,
-                detail=f"Format tensor neașteptat: {shape}"
+                detail=f"Format tensor neasteptat: {shape}"
             )
 
         channels, height, width, depth = shape
@@ -440,14 +440,14 @@ async def get_slice_info(filename: str):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la obținerea informațiilor: {str(e)}"
+            detail=f"Eroare la obtinerea informatiilor: {str(e)}"
         )
 
 
 @router.get("/saved")
 async def get_preprocessed_files():
     """
-    Listează fișierele preprocesate salvate
+    Listeaza fisierele preprocesate salvate
     """
     try:
         preprocessed_dir = TEMP_PREPROCESSING_DIR
@@ -478,14 +478,14 @@ async def get_preprocessed_files():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la listarea fișierelor preprocesate: {str(e)}"
+            detail=f"Eroare la listarea fisierelor preprocesate: {str(e)}"
         )
 
 
 @router.get("/load/{filename}")
 async def load_preprocessed_data(filename: str):
     """
-    Încarcă date preprocesate salvate
+    incarca date preprocesate salvate
     """
     if not SERVICE_AVAILABLE:
         raise HTTPException(
@@ -502,14 +502,14 @@ async def load_preprocessed_data(filename: str):
         if not file_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Fișierul preprocesат {filename} nu există"
+                detail=f"Fisierul preprocesат {filename} nu exista"
             )
 
-        # Încarcă tensorul
+        # incarca tensorul
         data = torch.load(file_path)
 
         return {
-            "message": f"Date preprocesate încărcate cu succes",
+            "message": f"Date preprocesate incarcate cu succes",
             "filename": filename,
             "shape": list(data.shape),
             "dtype": str(data.dtype),
@@ -519,5 +519,5 @@ async def load_preprocessed_data(filename: str):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Eroare la încărcarea datelor: {str(e)}"
+            detail=f"Eroare la incarcarea datelor: {str(e)}"
         )

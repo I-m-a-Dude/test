@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Utilități pentru validarea fișierelor NIfTI necesare pentru segmentare
+Utilitati pentru validarea fisierelor NIfTI necesare pentru segmentare
 """
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import re
 
-# Modalitățile necesare pentru modelul de segmentare
+# Modalitatile necesare pentru modelul de segmentare
 REQUIRED_MODALITIES = {
     't1c': 't1c.nii.gz',  # T1 contrast enhanced
     't1n': 't1n.nii.gz',  # T1 native
@@ -14,7 +14,7 @@ REQUIRED_MODALITIES = {
     't2f': 't2f.nii.gz'  # T2 FLAIR
 }
 
-# Pattern-uri alternative pentru recunoașterea modalităților
+# Pattern-uri alternative pentru recunoasterea modalitatilor
 MODALITY_PATTERNS = {
     't1c': [
         r't1c\.nii\.gz$',
@@ -54,13 +54,13 @@ MODALITY_PATTERNS = {
 
 def identify_modality(filename: str) -> Optional[str]:
     """
-    Identifică modalitatea unui fișier NIfTI bazat pe nume
+    Identifica modalitatea unui fisier NIfTI bazat pe nume
 
     Args:
-        filename: Numele fișierului
+        filename: Numele fisierului
 
     Returns:
-        Modalitatea identificată ('t1c', 't1n', 't2w', 't2f') sau None
+        Modalitatea identificata ('t1c', 't1n', 't2w', 't2f') sau None
     """
     filename_lower = filename.lower()
 
@@ -74,13 +74,13 @@ def identify_modality(filename: str) -> Optional[str]:
 
 def validate_segmentation_files(folder_path: Path) -> Dict:
     """
-    Validează dacă un folder conține toate fișierele necesare pentru segmentare
+    Valideaza daca un folder contine toate fisierele necesare pentru segmentare
 
     Args:
-        folder_path: Calea către folderul cu fișiere NIfTI
+        folder_path: Calea catre folderul cu fisiere NIfTI
 
     Returns:
-        Dict cu rezultatul validării
+        Dict cu rezultatul validarii
     """
     result = {
         "is_valid": False,
@@ -93,18 +93,18 @@ def validate_segmentation_files(folder_path: Path) -> Dict:
 
     try:
         if not folder_path.exists() or not folder_path.is_dir():
-            result["validation_errors"].append("Folderul nu există sau nu este director")
+            result["validation_errors"].append("Folderul nu exista sau nu este director")
             return result
 
-        # Găsește toate fișierele NIfTI
+        # Gaseste toate fisierele NIfTI
         nifti_files = list(folder_path.glob("*.nii.gz")) + list(folder_path.glob("*.nii"))
         result["total_nifti_files"] = len(nifti_files)
 
         if len(nifti_files) == 0:
-            result["validation_errors"].append("Nu au fost găsite fișiere NIfTI în folder")
+            result["validation_errors"].append("Nu au fost gasite fisiere NIfTI in folder")
             return result
 
-        # Identifică modalitățile
+        # Identifica modalitatile
         identified_modalities = {}
         unidentified_files = []
 
@@ -113,10 +113,10 @@ def validate_segmentation_files(folder_path: Path) -> Dict:
 
             if modality:
                 if modality in identified_modalities:
-                    # Modalitate duplicată
+                    # Modalitate duplicata
                     result["validation_errors"].append(
-                        f"Modalitatea {modality} găsită de mai multe ori: "
-                        f"{identified_modalities[modality]} și {nifti_file.name}"
+                        f"Modalitatea {modality} gasita de mai multe ori: "
+                        f"{identified_modalities[modality]} si {nifti_file.name}"
                     )
                 else:
                     identified_modalities[modality] = nifti_file.name
@@ -126,28 +126,28 @@ def validate_segmentation_files(folder_path: Path) -> Dict:
         result["found_modalities"] = identified_modalities
         result["extra_files"] = unidentified_files
 
-        # Verifică modalitățile lipsă
+        # Verifica modalitatile lipsa
         required_modalities = set(REQUIRED_MODALITIES.keys())
         found_modalities = set(identified_modalities.keys())
         missing_modalities = required_modalities - found_modalities
 
         result["missing_modalities"] = list(missing_modalities)
 
-        # Validarea finală
+        # Validarea finala
         if len(missing_modalities) == 0:
             result["is_valid"] = True
         else:
             result["validation_errors"].append(
-                f"Modalități lipsă: {', '.join(missing_modalities)}"
+                f"Modalitati lipsa: {', '.join(missing_modalities)}"
             )
 
         print(f"[VALIDATION] Folder: {folder_path.name}")
-        print(f"    - Fișiere NIfTI găsite: {len(nifti_files)}")
-        print(f"    - Modalități identificate: {list(found_modalities)}")
+        print(f"    - Fisiere NIfTI gasite: {len(nifti_files)}")
+        print(f"    - Modalitati identificate: {list(found_modalities)}")
         if missing_modalities:
-            print(f"    - Modalități lipsă: {list(missing_modalities)}")
+            print(f"    - Modalitati lipsa: {list(missing_modalities)}")
         if unidentified_files:
-            print(f"    - Fișiere neidentificate: {unidentified_files}")
+            print(f"    - Fisiere neidentificate: {unidentified_files}")
         print(f"    - Valid pentru segmentare: {'DA' if result['is_valid'] else 'NU'}")
 
         return result
@@ -159,13 +159,13 @@ def validate_segmentation_files(folder_path: Path) -> Dict:
 
 def get_modality_files_mapping(folder_path: Path) -> Optional[Dict[str, Path]]:
     """
-    Returnează mapping-ul modalitate -> cale fișier pentru un folder valid
+    Returneaza mapping-ul modalitate -> cale fisier pentru un folder valid
 
     Args:
-        folder_path: Calea către folderul validat
+        folder_path: Calea catre folderul validat
 
     Returns:
-        Dict cu mapping modalitate -> Path sau None dacă nu e valid
+        Dict cu mapping modalitate -> Path sau None daca nu e valid
     """
     validation_result = validate_segmentation_files(folder_path)
 
@@ -181,13 +181,13 @@ def get_modality_files_mapping(folder_path: Path) -> Optional[Dict[str, Path]]:
 
 def create_standard_filenames(base_name: str) -> Dict[str, str]:
     """
-    Creează numele standard pentru fișierele de segmentare
+    Creeaza numele standard pentru fisierele de segmentare
 
     Args:
-        base_name: Numele de bază (ex: "patient_001")
+        base_name: Numele de baza (ex: "patient_001")
 
     Returns:
-        Dict cu mapping modalitate -> nume fișier standard
+        Dict cu mapping modalitate -> nume fisier standard
     """
     return {
         modality: f"{base_name}_{filename}"
@@ -197,14 +197,14 @@ def create_standard_filenames(base_name: str) -> Dict[str, str]:
 
 def rename_to_standard_format(folder_path: Path, base_name: Optional[str] = None) -> bool:
     """
-    Redenumește fișierele într-un format standard pentru procesare
+    Redenumeste fisierele intr-un format standard pentru procesare
 
     Args:
-        folder_path: Calea către folder
-        base_name: Numele de bază (default: numele folderului)
+        folder_path: Calea catre folder
+        base_name: Numele de baza (default: numele folderului)
 
     Returns:
-        True dacă redenumirea a reușit
+        True daca redenumirea a reusit
     """
     if base_name is None:
         base_name = folder_path.name
@@ -227,7 +227,7 @@ def rename_to_standard_format(folder_path: Path, base_name: Optional[str] = None
                 current_path.rename(new_path)
                 print(f"[RENAME] {current_filename} -> {new_filename}")
 
-        print(f"[SUCCESS] Fișiere redenumite în format standard pentru {base_name}")
+        print(f"[SUCCESS] Fisiere redenumite in format standard pentru {base_name}")
         return True
 
     except Exception as e:
@@ -237,18 +237,18 @@ def rename_to_standard_format(folder_path: Path, base_name: Optional[str] = None
 
 def get_validation_summary(folder_path: Path) -> str:
     """
-    Returnează un rezumat textual al validării
+    Returneaza un rezumat textual al validarii
 
     Args:
-        folder_path: Calea către folder
+        folder_path: Calea catre folder
 
     Returns:
-        String cu rezumatul validării
+        String cu rezumatul validarii
     """
     result = validate_segmentation_files(folder_path)
 
     if result["is_valid"]:
-        return f"✅ Folder valid pentru segmentare cu {len(result['found_modalities'])} modalități"
+        return f"✅ Folder valid pentru segmentare cu {len(result['found_modalities'])} modalitati"
     else:
         errors = "; ".join(result["validation_errors"])
         return f"❌ Folder invalid: {errors}"
@@ -256,10 +256,10 @@ def get_validation_summary(folder_path: Path) -> str:
 
 def find_valid_segmentation_folders(base_dir: Path) -> List[Tuple[Path, Dict]]:
     """
-    Găsește toate folderele valide pentru segmentare într-un director
+    Gaseste toate folderele valide pentru segmentare intr-un director
 
     Args:
-        base_dir: Directorul de căutat
+        base_dir: Directorul de cautat
 
     Returns:
         Lista de tuple (folder_path, validation_result)
@@ -273,9 +273,9 @@ def find_valid_segmentation_folders(base_dir: Path) -> List[Tuple[Path, Dict]]:
                 if validation_result["is_valid"]:
                     valid_folders.append((folder_path, validation_result))
 
-        print(f"[SEARCH] Găsite {len(valid_folders)} foldere valide în {base_dir}")
+        print(f"[SEARCH] Gasite {len(valid_folders)} foldere valide in {base_dir}")
 
     except Exception as e:
-        print(f"[ERROR] Eroare la căutarea folderelor: {str(e)}")
+        print(f"[ERROR] Eroare la cautarea folderelor: {str(e)}")
 
     return valid_folders

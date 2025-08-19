@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-API Endpoints pentru operațiile cu fișiere
+API Endpoints pentru operatiile cu fisiere
 """
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
@@ -15,63 +15,63 @@ router = APIRouter(prefix="/files", tags=["Files"])
 
 def resolve_file_path(filename: str) -> Path:
     """
-    Rezolvă calea către un fișier, acceptând și fișiere din subfoldere
+    Rezolva calea catre un fisier, acceptand si fisiere din subfoldere
 
     Args:
-        filename: Numele fișierului sau path relativ (ex: "folder/file.nii.gz")
+        filename: Numele fisierului sau path relativ (ex: "folder/file.nii.gz")
 
     Returns:
-        Path către fișier
+        Path catre fisier
 
     Raises:
-        HTTPException: Dacă fișierul nu există sau calea este nesigură
+        HTTPException: Daca fisierul nu exista sau calea este nesigura
     """
     try:
-        # Construiește calea și verifică că nu iese din UPLOAD_DIR (securitate)
+        # Construieste calea si verifica ca nu iese din UPLOAD_DIR (securitate)
         file_path = UPLOAD_DIR / filename
         file_path = file_path.resolve()
 
-        # Verifică că fișierul este într-adevăr în UPLOAD_DIR sau subfolderele sale
+        # Verifica ca fisierul este intr-adevar in UPLOAD_DIR sau subfolderele sale
         if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
-            raise HTTPException(status_code=400, detail="Calea către fișier nu este permisă")
+            raise HTTPException(status_code=400, detail="Calea catre fisier nu este permisa")
 
-        # Verifică că fișierul există
+        # Verifica ca fisierul exista
         if not file_path.exists():
-            # Încearcă să îl găsească în subfoldere dacă nu e găsit direct
+            # incearca sa il gaseasca in subfoldere daca nu e gasit direct
             possible_paths = list(UPLOAD_DIR.rglob(Path(filename).name))
             if possible_paths:
-                print(f"[INFO] Fișier găsit în subfolder: {possible_paths[0]}")
+                print(f"[INFO] Fisier gasit in subfolder: {possible_paths[0]}")
                 return possible_paths[0]
             else:
-                raise HTTPException(status_code=404, detail="Fișierul nu există")
+                raise HTTPException(status_code=404, detail="Fisierul nu exista")
 
         return file_path
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare la rezolvarea căii pentru {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la procesarea căii: {str(e)}")
+        print(f"[ERROR] Eroare la rezolvarea caii pentru {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la procesarea caii: {str(e)}")
 
 
 @router.post("/upload-mri")
 async def upload_mri_file(file: UploadFile = File(...)):
     """
-    Upload fișier MRI (inclusiv ZIP-uri cu fișiere NIfTI)
+    Upload fisier MRI (inclusiv ZIP-uri cu fisiere NIfTI)
     """
-    print(f"[INFO] Încercare upload: {file.filename}")
+    print(f"[INFO] incercare upload: {file.filename}")
 
     try:
-        # Validează fișierul
+        # Valideaza fisierul
         validate_file(file)
 
-        # Salvează fișierul (și îl dezarhivează dacă e ZIP)
+        # Salveaza fisierul (si il dezarhiveaza daca e ZIP)
         file_info = await save_file(file)
 
         if file_info.get("type") == "zip_extracted":
             print(f"[SUCCESS] ZIP dezarhivat: {file.filename}")
-            print(f"[INFO] Extras în folderul: {file_info['extraction']['extracted_folder']}")
-            print(f"[INFO] Fișiere NIfTI găsite: {file_info['extraction']['nifti_files_count']}")
+            print(f"[INFO] Extras in folderul: {file_info['extraction']['extracted_folder']}")
+            print(f"[INFO] Fisiere NIfTI gasite: {file_info['extraction']['nifti_files_count']}")
 
             return JSONResponse(
                 status_code=200,
@@ -87,34 +87,34 @@ async def upload_mri_file(file: UploadFile = File(...)):
             return JSONResponse(
                 status_code=200,
                 content={
-                    "message": "ZIP salvat dar dezarhivarea a eșuat",
+                    "message": "ZIP salvat dar dezarhivarea a esuat",
                     "file_info": file_info
                 }
             )
 
         else:
-            print(f"[SUCCESS] Fișier salvat: {file.filename} ({file_info['size_mb']})")
+            print(f"[SUCCESS] Fisier salvat: {file.filename} ({file_info['size_mb']})")
 
             return JSONResponse(
                 status_code=200,
                 content={
-                    "message": "Fișier încărcat cu succes",
+                    "message": "Fisier incarcat cu succes",
                     "file_info": file_info
                 }
             )
 
     except HTTPException:
-        # Re-ridică excepțiile HTTP
+        # Re-ridica exceptiile HTTP
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare neașteptată: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
+        print(f"[ERROR] Eroare neasteptata: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare interna: {str(e)}")
 
 
 @router.get("/")
 async def get_uploaded_files():
     """
-    Listează fișierele și folderele încărcate
+    Listeaza fisierele si folderele incarcate
     """
     try:
         items = list_files()
@@ -122,7 +122,7 @@ async def get_uploaded_files():
         files_count = len([item for item in items if item["type"] == "file"])
         folders_count = len([item for item in items if item["type"] == "folder"])
 
-        print(f"[INFO] Listare: {files_count} fișiere, {folders_count} foldere")
+        print(f"[INFO] Listare: {files_count} fisiere, {folders_count} foldere")
 
         return {
             "items": items,
@@ -133,27 +133,27 @@ async def get_uploaded_files():
         }
 
     except Exception as e:
-        print(f"[ERROR] Eroare la listarea fișierelor: {str(e)}")
+        print(f"[ERROR] Eroare la listarea fisierelor: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la listare: {str(e)}")
 
 
 @router.delete("/{filename:path}")
 async def delete_uploaded_file(filename: str):
     """
-    Șterge un fișier sau folder încărcat
-    Acceptă și paths către fișiere din subfoldere
+    sterge un fisier sau folder incarcat
+    Accepta si paths catre fisiere din subfoldere
     """
-    print(f"[INFO] Încercare ștergere: {filename}")
+    print(f"[INFO] incercare stergere: {filename}")
 
     try:
         result = delete_file(filename)
 
         if result["type"] == "file":
-            print(f"[SUCCESS] Fișier șters: {filename} ({result['size_mb']})")
-            message = f"Fișierul {filename} a fost șters cu succes"
+            print(f"[SUCCESS] Fisier sters: {filename} ({result['size_mb']})")
+            message = f"Fisierul {filename} a fost sters cu succes"
         else:
-            print(f"[SUCCESS] Folder șters: {filename} ({result['files_deleted']} fișiere, {result['size_mb']})")
-            message = f"Folderul {filename} a fost șters cu succes"
+            print(f"[SUCCESS] Folder sters: {filename} ({result['files_deleted']} fisiere, {result['size_mb']})")
+            message = f"Folderul {filename} a fost sters cu succes"
 
         return {
             "message": message,
@@ -161,18 +161,18 @@ async def delete_uploaded_file(filename: str):
         }
 
     except HTTPException:
-        # Re-ridică excepțiile HTTP
+        # Re-ridica exceptiile HTTP
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare neașteptată la ștergere: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare internă: {str(e)}")
+        print(f"[ERROR] Eroare neasteptata la stergere: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare interna: {str(e)}")
 
 
 @router.get("/{filename:path}/info")
 async def get_file_info(filename: str):
     """
-    Obține informații despre un fișier specific
-    Acceptă și paths către fișiere din subfoldere
+    Obtine informatii despre un fisier specific
+    Accepta si paths catre fisiere din subfoldere
     """
     try:
         file_path = resolve_file_path(filename)
@@ -193,23 +193,23 @@ async def get_file_info(filename: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare la citirea informațiilor pentru {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la citirea informațiilor: {str(e)}")
+        print(f"[ERROR] Eroare la citirea informatiilor pentru {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la citirea informatiilor: {str(e)}")
 
 
 @router.get("/{filename:path}/download")
 async def download_file(filename: str):
     """
-    Descarcă un fișier (returnează fișierul direct în browser)
-    Acceptă și paths către fișiere din subfoldere
+    Descarca un fisier (returneaza fisierul direct in browser)
+    Accepta si paths catre fisiere din subfoldere
     """
     try:
         file_path = resolve_file_path(filename)
         actual_filename = file_path.name
 
-        print(f"[INFO] Descărcare fișier: {filename} -> {file_path}")
+        print(f"[INFO] Descarcare fisier: {filename} -> {file_path}")
 
-        # Detectează tipul MIME
+        # Detecteaza tipul MIME
         mime_type, _ = mimetypes.guess_type(str(file_path))
         if not mime_type:
             mime_type = "application/octet-stream"
@@ -223,23 +223,23 @@ async def download_file(filename: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare la descărcarea fișierului {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")
+        print(f"[ERROR] Eroare la descarcarea fisierului {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la descarcare: {str(e)}")
 
 
 @router.get("/{filename:path}/download-attachment")
 async def download_file_attachment(filename: str):
     """
-    Descarcă un fișier ca attachment (forțează salvarea)
-    Acceptă și paths către fișiere din subfoldere
+    Descarca un fisier ca attachment (forteaza salvarea)
+    Accepta si paths catre fisiere din subfoldere
     """
     try:
         file_path = resolve_file_path(filename)
         actual_filename = file_path.name
 
-        print(f"[INFO] Descărcare attachment: {filename} -> {file_path}")
+        print(f"[INFO] Descarcare attachment: {filename} -> {file_path}")
 
-        # Pentru fișiere .nii.gz setează tipul corect
+        # Pentru fisiere .nii.gz seteaza tipul corect
         if actual_filename.lower().endswith('.nii.gz'):
             media_type = "application/gzip"
         elif actual_filename.lower().endswith('.nii'):
@@ -259,20 +259,20 @@ async def download_file_attachment(filename: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare la descărcarea attachment {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Eroare la descărcare: {str(e)}")
+        print(f"[ERROR] Eroare la descarcarea attachment {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Eroare la descarcare: {str(e)}")
 
 
 @router.get("/folder/{folder_name}/files")
 async def get_folder_files(folder_name: str):
     """
-    Listează fișierele dintr-un folder specific
+    Listeaza fisierele dintr-un folder specific
     """
     try:
         folder_path = UPLOAD_DIR / folder_name
 
         if not folder_path.exists() or not folder_path.is_dir():
-            raise HTTPException(status_code=404, detail=f"Folderul {folder_name} nu există")
+            raise HTTPException(status_code=404, detail=f"Folderul {folder_name} nu exista")
 
         files = []
         for file_path in folder_path.iterdir():
@@ -298,5 +298,5 @@ async def get_folder_files(folder_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Eroare la listarea fișierelor din folder {folder_name}: {str(e)}")
+        print(f"[ERROR] Eroare la listarea fisierelor din folder {folder_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la listarea folderului: {str(e)}")

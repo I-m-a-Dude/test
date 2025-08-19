@@ -383,74 +383,15 @@ ${Object.entries(segmentation_info.class_counts)
 • Postprocesare: ${timing.postprocess_time.toFixed(2)}s
 • **Total: ${timing.total_time.toFixed(2)}s**
 
-🔍 INTERPRETARE CLINICĂ:
-${generateClinicalInterpretation(segmentation_info)}
 
 ⚠️ NOTĂ IMPORTANTĂ:
 Această analiză este generată automat de un model de inteligență artificială și are scop de asistență în diagnoză. Rezultatele TREBUIE să fie validate de un radiolog calificat înainte de orice decizie clinică.
 
-🔬 Model utilizat: MedNeXt (MONAI) - BraTS 2023
-📅 Data analizei: ${new Date().toLocaleString('ro-RO')}
-🏥 Platforma: MediView v1.0.0`;
+🔬 Model utilizat: MedNeXt (MONAI) - BraTS 2024
+📅 Data analizei: ${new Date().toLocaleString('ro-RO')}`;
 }
 
-/**
- * Generate clinical interpretation based on segmentation results
- */
-function generateClinicalInterpretation(segmentationInfo: InferenceResponse['segmentation_info']): string {
-  const { classes_found, class_counts, total_segmented_voxels } = segmentationInfo;
-  
-  if (total_segmented_voxels === 0) {
-    return `Nu s-au detectat anomalii semnificative în scanul MRI. Țesutul cerebral pare să prezinte caracteristici normale în toate modalitățile analizate.
 
-RECOMANDĂRI:
-• Monitorizare de rutină conform protocolului clinic
-• Reevaluare la intervalele standard pentru pacientul respectiv`;
-  }
-
-  const hasET = classes_found.includes(3);
-  const hasNETC = classes_found.includes(1);
-  const hasSNFH = classes_found.includes(2);
-  const hasRC = classes_found.includes(4);
-
-  let interpretation = '';
-
-  if (hasET && hasNETC) {
-    interpretation += `Se observă prezența unei tumori active cu componente enhancing și non-enhancing, sugestivă pentru gliom de grad înalt.
-
-CARACTERISTICI OBSERVATE:
-• Componentă enhancing (ET): ${class_counts[3]?.toLocaleString() || 0} voxeli - indică țesut tumoral activ
-• Componentă non-enhancing (NETC): ${class_counts[1]?.toLocaleString() || 0} voxeli - posibilă expansiune tumorală`;
-  } else if (hasET) {
-    interpretation += `Se detectează țesut tumoral cu enhancement, indicând activitate tumorală.
-
-OBSERVAȚII:
-• Componentă enhancing: ${class_counts[3]?.toLocaleString() || 0} voxeli`;
-  } else if (hasNETC) {
-    interpretation += `Se observă țesut tumoral fără enhancement significant.
-
-OBSERVAȚII:  
-• Componentă non-enhancing: ${class_counts[1]?.toLocaleString() || 0} voxeli`;
-  }
-
-  if (hasSNFH) {
-    interpretation += `\n• Hiperintensitate FLAIR circumjacentă: ${class_counts[2]?.toLocaleString() || 0} voxeli - poate indica edem sau infiltrație tumorală`;
-  }
-
-  if (hasRC) {
-    interpretation += `\n• Cavitate de rezecție: ${class_counts[4]?.toLocaleString() || 0} voxeli - consistent cu intervenție chirurgicală anterioară`;
-  }
-
-  interpretation += `
-
-RECOMANDĂRI:
-• Corelație cu simptomatologia clinică
-• Comparație cu scanările anterioare pentru evaluarea progresiei
-• Consultație multidisciplinară (neurochirurg, neuro-oncolog, radioterapeut)
-• Follow-up conform protocolului instituțional pentru gliome`;
-
-  return interpretation;
-}
 
 // Keep all existing functions unchanged...
 /**
