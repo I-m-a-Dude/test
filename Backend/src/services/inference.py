@@ -45,22 +45,22 @@ class GliomaInferenceService:
         Returns:
             Dict cu rezultatele complete
         """
-        print(f"🚀 Start pipeline inferență pentru: {folder_path.name}")
+        print(f"Start pipeline inferență pentru: {folder_path.name}")
         start_time = time.time()
 
         try:
             # 1. PREPROCESS
-            print("📊 Etapa 1: Preprocesare...")
+            print("Etapa 1: Preprocesare...")
             preprocess_start = time.time()
             preprocessed_data = self.preprocessor.preprocess_folder(folder_path)
             preprocess_time = time.time() - preprocess_start
 
             image_tensor = preprocessed_data["image_tensor"]
-            print(f"✅ Preprocesare completă: {preprocess_time:.2f}s")
+            print(f"Preprocesare completă: {preprocess_time:.2f}s")
             print(f"   Shape: {list(image_tensor.shape)}")
 
             # 2. INFERENCE
-            print("🧠 Etapa 2: Inferență model...")
+            print("Etapa 2: Inferență model...")
 
             # Asigură că modelul e încărcat
             if not self.model_wrapper.is_loaded:
@@ -78,11 +78,11 @@ class GliomaInferenceService:
                 predictions = self.model_wrapper.predict(image_tensor)
 
             inference_time = time.time() - inference_start
-            print(f"✅ Inferență completă: {inference_time:.2f}s")
+            print(f"Inferență completă: {inference_time:.2f}s")
             print(f"   Output shape: {list(predictions.shape)}")
 
             # 3. POSTPROCESS
-            print("🔧 Etapa 3: Postprocesare...")
+            print("Etapa 3: Postprocesare...")
             postprocess_start = time.time()
 
             # Elimină dimensiunea batch pentru postprocesare
@@ -92,12 +92,12 @@ class GliomaInferenceService:
             segmentation, postprocess_stats = self.postprocessor.postprocess_segmentation(predictions)
             postprocess_time = time.time() - postprocess_start
 
-            print(f"✅ Postprocesare completă: {postprocess_time:.2f}s")
+            print(f"Postprocesare completă: {postprocess_time:.2f}s")
 
             # 4. SALVARE (opțional)
             saved_path = None
             if save_result:
-                print("💾 Etapa 4: Salvare rezultat...")
+                print("Etapa 4: Salvare rezultat...")
 
                 if output_dir is None:
                     output_dir = Path("results")
@@ -115,7 +115,7 @@ class GliomaInferenceService:
                 saved_path = self.postprocessor.save_as_nifti(
                     segmentation, output_path, reference_nifti
                 )
-                print(f"✅ Rezultat salvat: {saved_path}")
+                print(f"Rezultat salvat: {saved_path}")
 
             # Timing total
             total_time = time.time() - start_time
@@ -141,7 +141,7 @@ class GliomaInferenceService:
                 "segmentation_array": segmentation  # Pentru utilizare ulterioară
             }
 
-            print(f"🎯 Pipeline complet în {total_time:.2f}s")
+            print(f"Pipeline complet în {total_time:.2f}s")
             print(
                 f"   Preprocess: {preprocess_time:.1f}s | Inference: {inference_time:.1f}s | Postprocess: {postprocess_time:.1f}s")
 
@@ -149,7 +149,7 @@ class GliomaInferenceService:
 
         except Exception as e:
             error_time = time.time() - start_time
-            print(f"❌ Eroare în pipeline după {error_time:.2f}s: {str(e)}")
+            print(f"Eroare în pipeline după {error_time:.2f}s: {str(e)}")
 
             return {
                 "success": False,
@@ -170,7 +170,7 @@ class GliomaInferenceService:
         Returns:
             Dict cu rezultatele
         """
-        print(f"🧠 Inferență directă pentru: {folder_name}")
+        print(f"Inferență directă pentru: {folder_name}")
         start_time = time.time()
 
         try:
