@@ -1,4 +1,3 @@
-// frontend/src/pages/result-page.tsx
 import { ResultsMriViewer } from '@/components/results-mri-viewer';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
@@ -8,7 +7,7 @@ import { MetadataViewerDialog } from '@/components/metadata-viewer-dialog';
 import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target } from 'lucide-react';
+import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target, Palette } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -238,6 +237,38 @@ export default function ResultPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </>
+              )}
+
+              {/* Segmentation Color Legend */}
+              {segmentationFile && isViewingSegmentation && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Palette className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="font-semibold text-sm">Color Legend</h3>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(0, 100, 255)' }}></div>
+                        <span className="text-xs">NETC - Non-Enhancing Tumor Core</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 255, 0)' }}></div>
+                        <span className="text-xs">SNFH - Surrounding FLAIR Hyperintensity</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 0, 0)' }}></div>
+                        <span className="text-xs">ET - Enhancing Tumor</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(128, 0, 128)' }}></div>
+                        <span className="text-xs">RC - Resection Cavity</span>
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

@@ -1,4 +1,3 @@
-// frontend/src/components/results-mri-viewer.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import * as nifti from 'nifti-reader-js';
 import pako from 'pako';
@@ -8,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import { ViewerToolbar } from './viewer-toolbar';
 import { cn } from '@/utils/cn';
-import { getDataType, calculateAndSetChartData, drawSlice } from '@/utils/mriUtils';
+import { getDataType, calculateAndSetChartData, drawSlice, drawSliceWithSegmentation, isSegmentationFile } from '@/utils/mriUtils';
 
 export function ResultsMriViewer() {
   const { currentFile, slice, zoom, axis, pan, setPan, setMaxSlices, zoomIn, zoomOut } = useResultsViewerStore();
@@ -32,6 +31,7 @@ export function ResultsMriViewer() {
   const [niftiImage, setNiftiImage] = useState<ArrayBuffer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSegmentation, setIsSegmentation] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [isPanning, setIsPanning] = useState(false);
@@ -83,6 +83,37 @@ export function ResultsMriViewer() {
 
         console.log(`Image data loaded: ${image.byteLength} bytes`);
 
+        // Convert to typed data for segmentation detection
+        let typedData: Float32Array;
+        switch (header.datatype || header.datatypeCode) {
+          case nifti.NIFTI1.TYPE_INT16:
+            typedData = new Float32Array(new Int16Array(image));
+            break;
+          case nifti.NIFTI1.TYPE_UINT16:
+            typedData = new Float32Array(new Uint16Array(image));
+            break;
+          case nifti.NIFTI1.TYPE_INT32:
+            typedData = new Float32Array(new Int32Array(image));
+            break;
+          case nifti.NIFTI1.TYPE_UINT32:
+            typedData = new Float32Array(new Uint32Array(image));
+            break;
+          case nifti.NIFTI1.TYPE_FLOAT32:
+            typedData = new Float32Array(image);
+            break;
+          case nifti.NIFTI1.TYPE_FLOAT64:
+            const float64Data = new Float64Array(image);
+            typedData = new Float32Array(float64Data);
+            break;
+          default:
+            typedData = new Float32Array(image);
+        }
+
+        // Detect if this is a segmentation file
+        const segmentationDetected = isSegmentationFile(currentFile.name, typedData);
+        setIsSegmentation(segmentationDetected);
+        console.log('Segmentation detected:', segmentationDetected);
+
         setNiftiHeader(header);
         setNiftiImage(image);
 
@@ -118,6 +149,7 @@ export function ResultsMriViewer() {
           'Q-form Code': header.qform_code || 0,
           'S-form Code': header.sform_code || 0,
           'Intent Name': header.intent_name || 'N/A',
+          'Is Segmentation': segmentationDetected ? 'Yes' : 'No',
         });
 
       } catch (err) {
@@ -134,25 +166,39 @@ export function ResultsMriViewer() {
   useEffect(() => {
     if (!loading && !error && niftiHeader && niftiImage && canvasRef.current) {
       try {
-        drawSlice({
-          canvas: canvasRef.current,
-          header: niftiHeader,
-          image: niftiImage,
-          slice,
-          axis,
-          brightness,
-          contrast,
-          windowCenter,
-          windowWidth,
-          sliceThickness,
-          useWindowing,
-        });
+        if (isSegmentation) {
+          // Draw with segmentation colors
+          drawSliceWithSegmentation({
+            canvas: canvasRef.current,
+            header: niftiHeader,
+            image: niftiImage,
+            slice,
+            axis,
+            sliceThickness,
+            opacity: 0.8,
+          });
+        } else {
+          // Draw normally
+          drawSlice({
+            canvas: canvasRef.current,
+            header: niftiHeader,
+            image: niftiImage,
+            slice,
+            axis,
+            brightness,
+            contrast,
+            windowCenter,
+            windowWidth,
+            sliceThickness,
+            useWindowing,
+          });
+        }
       } catch (err) {
         console.error('Error drawing slice:', err);
         setError(`Failed to render slice: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
-  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, windowCenter, windowWidth, sliceThickness, useWindowing]);
+  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, windowCenter, windowWidth, sliceThickness, useWindowing, isSegmentation]);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -237,7 +283,9 @@ export function ResultsMriViewer() {
                 {axis} View
             </div>
             <div className="absolute bottom-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded backdrop-blur">
-                {useWindowing ? (
+                {isSegmentation ? (
+                  'Segmentation View'
+                ) : useWindowing ? (
                   `WC: ${windowCenter.toFixed(0)} WW: ${windowWidth.toFixed(0)}`
                 ) : (
                   `B: ${brightness}% C: ${contrast}%`
