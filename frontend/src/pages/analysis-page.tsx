@@ -16,25 +16,17 @@ import { useResultStore } from '@/utils/stores/result-store';
 export default function AnalysisPage() {
   useCineMode();
   const navigate = useNavigate();
-  const { file, setFile, setLastKnownBackendFile } = useMriStore();
-  const { analysisResult, fileName, segmentationFile, setAnalysisResult, clearResults } = useResultStore();
+  const { file } = useMriStore();
+  const { analysisResult, originalFile, setAnalysisResult, clearResults } = useResultStore();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState('');
 
-  const hasResultForCurrentFile = analysisResult && fileName === file?.name;
+  const hasResultForCurrentFile = analysisResult && originalFile?.name === file?.name;
 
   const handleButtonClick = () => {
     if (hasResultForCurrentFile) {
-      // Load segmentation file before navigating
-      if (segmentationFile) {
-        setFile(segmentationFile);
-        setLastKnownBackendFile(segmentationFile.name);
-        toast({
-          title: 'Loaded segmentation',
-          description: 'The segmentation file has been uploaded for viewing.',
-        });
-      }
+      // Navigate directly to results - results page handles segmentation loading
       navigate(pages.result);
     } else {
       generateAnalysis();
@@ -44,7 +36,7 @@ export default function AnalysisPage() {
   const generateAnalysis = async () => {
     if (!file) {
       toast({
-        title: 'Missing file',
+        title: 'No file found',
         description: 'Please upload an MRI file first.',
         variant: 'destructive',
       });
@@ -55,33 +47,29 @@ export default function AnalysisPage() {
     clearResults();
 
     try {
-      // Step 1: Start analysis
-      setGenerationProgress('Identifying MRI modalities...');
+      setGenerationProgress('Identifying MRI modalities folder...');
+      setGenerationProgress('Running AI inference on all modalities...');
 
-      // Step 2: Generate analysis (this now includes inference)
-      setGenerationProgress('Rolling out AI inference...');
-      const result = await generateMriAnalysis(file, 'Analizează pentru gliome post-tratament');
+      const result = await generateMriAnalysis(file, 'Analyze for post-treatment gliomas');
 
-      // Step 3: Store results
-      setGenerationProgress('Storing results...');
+      setGenerationProgress('Processing results...');
       setAnalysisResult(
         result.analysis,
-        file.name,
+        file, // Pass the original file
         result.segmentationFile,
         result.inferenceResult
       );
 
-      // Step 4: Success feedback
       if (result.segmentationFile) {
         toast({
-          title: 'Analysis complete',
-          description: `The segmentation has been successfully generated. You can view the results now.`,
+          title: 'Analysis completed successfully! 🎉',
+          description: 'Segmentation generated. Click "View Results" to see details.',
           duration: 5000,
         });
       } else {
         toast({
-          title: 'Analysis complete',
-          description: 'The text analysis has been generated. See the results for details.',
+          title: 'Analysis completed',
+          description: 'Text analysis generated. Click "View Results" for details.',
           duration: 5000,
         });
       }
@@ -89,14 +77,13 @@ export default function AnalysisPage() {
     } catch (error) {
       console.error('Analysis failed:', error);
 
-      // Show specific error messages
-      let errorMessage = 'Something went wrong with the generation of the analysis.';
+      let errorMessage = 'Something went wrong during analysis.';
 
       if (error instanceof Error) {
         if (error.message.includes('folder')) {
-          errorMessage = 'The folder with the MRI modalities could not be identified. Make sure that the file is part of a complete set of modalities.';
+          errorMessage = 'Could not identify MRI modalities folder. Ensure the file is part of a complete modality set.';
         } else if (error.message.includes('inference')) {
-          errorMessage = 'The AI inference failed. Please check the file and try again.';
+          errorMessage = 'AI inference failed. Check that the ML server is functional.';
         } else if (error.message.includes('network') || error.message.includes('fetch')) {
           errorMessage = 'Connection error. Check that the backend server is running.';
         } else {
@@ -105,7 +92,7 @@ export default function AnalysisPage() {
       }
 
       toast({
-        title: 'Error Generating Analysis',
+        title: 'Analysis error',
         description: errorMessage,
         variant: 'destructive',
         duration: 7000,
@@ -136,16 +123,9 @@ export default function AnalysisPage() {
     return (
       <>
         <BrainCircuit className="mr-2 h-4 w-4" />
-        Generate Analysis
+        Generate AI Segmentation
       </>
     );
-  };
-
-  const getButtonVariant = () => {
-    if (hasResultForCurrentFile) {
-      return 'default'; // Success color for viewing results
-    }
-    return 'default';
   };
 
   return (
@@ -156,14 +136,13 @@ export default function AnalysisPage() {
           <Button
             onClick={handleButtonClick}
             disabled={isGenerating || !file}
-            className={`rounded-full ${hasResultForCurrentFile ? 'bg-green-600 hover:bg-green-700' : ''}`}
-            variant={getButtonVariant()}
+            className="rounded-full"
           >
             {getButtonContent()}
           </Button>
           <Button variant="outline" asChild className="rounded-full">
               <Link to="/">
-                Back to Home
+                Back to Upload
               </Link>
           </Button>
         </div>
@@ -174,17 +153,16 @@ export default function AnalysisPage() {
           <div className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
             <MriViewer />
 
-            {/* Overlay pentru progres când se generează analiza */}
             {isGenerating && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 backdrop-blur-sm">
                 <div className="bg-card border rounded-lg p-6 max-w-md text-center">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-                  <h3 className="font-semibold mb-2">Working on processing</h3>
+                  <h3 className="font-semibold mb-2">Running AI Analysis</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {generationProgress || 'Generating analysis...'}
+                    {generationProgress || 'Processing...'}
                   </p>
                   <div className="text-xs text-muted-foreground">
-                    Please wait while the analysis is being generated. This may take a few moments depending on the file size and complexity.
+                    This process may take a few minutes
                   </div>
                 </div>
               </div>

@@ -2,38 +2,56 @@ import { create } from 'zustand';
 import type { InferenceResponse } from '@/utils/api';
 
 interface ResultState {
+  // Analysis data
   analysisResult: string | null;
-  fileName: string | null;
-  segmentationFile: File | null;
   inferenceResult: InferenceResponse | null;
+
+  // Files for results page ONLY
+  originalFile: File | null;
+  segmentationFile: File | null;
+  isViewingSegmentation: boolean;
+
+  // Results actions
   setAnalysisResult: (
     result: string | null,
-    fileName: string | null,
+    originalFile: File | null,
     segmentationFile?: File | null,
     inferenceResult?: InferenceResponse | null
   ) => void;
+  setViewingSegmentation: (viewing: boolean) => void;
+  switchToOriginal: () => void;
+  switchToSegmentation: () => void;
   clearResults: () => void;
 }
 
-export const useResultStore = create<ResultState>((set) => ({
+export const useResultStore = create<ResultState>((set, get) => ({
   analysisResult: null,
-  fileName: null,
-  segmentationFile: null,
   inferenceResult: null,
+  originalFile: null,
+  segmentationFile: null,
+  isViewingSegmentation: false,
 
-  setAnalysisResult: (result, fileName, segmentationFile = null, inferenceResult = null) =>
+  setAnalysisResult: (result, originalFile, segmentationFile = null, inferenceResult = null) =>
     set({
       analysisResult: result,
-      fileName: fileName,
+      originalFile: originalFile,
       segmentationFile: segmentationFile,
-      inferenceResult: inferenceResult
+      inferenceResult: inferenceResult,
+      isViewingSegmentation: segmentationFile ? true : false, // Auto-switch to segmentation if available
     }),
+
+  setViewingSegmentation: (viewing) => set({ isViewingSegmentation: viewing }),
+
+  switchToOriginal: () => set({ isViewingSegmentation: false }),
+
+  switchToSegmentation: () => set({ isViewingSegmentation: true }),
 
   clearResults: () =>
     set({
       analysisResult: null,
-      fileName: null,
+      inferenceResult: null,
+      originalFile: null,
       segmentationFile: null,
-      inferenceResult: null
+      isViewingSegmentation: false,
     })
 }));

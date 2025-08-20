@@ -1,27 +1,42 @@
 import { useViewStore } from '@/utils/stores/view-store';
+import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { useAnalysisStore } from '@/utils/stores/analysis-store';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut, RotateCcw, Scan, Play, Pause } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMriStore } from '@/utils/stores/mri-store';
+import { useLocation } from 'react-router-dom';
 import type {ViewAxis} from '@/types/view-types';
 
 export function ViewerToolbar() {
-  const { 
-    slice, 
-    maxSlices, 
-    axis, 
-    setSlice, 
+  const location = useLocation();
+  const isResultsPage = location.pathname.includes('/result');
+
+  // Use different stores based on current page
+  const analysisViewStore = useViewStore();
+  const resultsViewStore = useResultsViewerStore();
+
+  const viewStore = isResultsPage ? resultsViewStore : analysisViewStore;
+
+  const {
+    slice,
+    maxSlices,
+    axis,
+    setSlice,
     setAxis,
-    zoomIn, 
+    zoomIn,
     zoomOut,
     resetView,
-  } = useViewStore();
+  } = viewStore;
 
   const { isCineMode, setIsCineMode } = useAnalysisStore();
 
-  const file = useMriStore(state => state.file);
+  // Check for file existence based on page
+  const analysisFile = useMriStore(state => state.file);
+  const resultsFile = useResultsViewerStore(state => state.currentFile);
+
+  const file = isResultsPage ? resultsFile : analysisFile;
   const isDisabled = !file;
   
   return (
