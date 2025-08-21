@@ -139,7 +139,7 @@ export const runInferenceOnFolder = async (folderName: string): Promise<Inferenc
  */
 export const downloadSegmentationResult = async (folderName: string): Promise<File> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/inference/results/${encodeURIComponent(folderName)}/download`);
+    const response = await fetch(`${API_BASE_URL}/inference/results/${encodeURIComponent(folderName)}/download-segmentation`);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcarea segmentării' }));
