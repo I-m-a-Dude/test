@@ -142,7 +142,7 @@ export const downloadSegmentationResult = async (folderName: string): Promise<Fi
     const response = await fetch(`${API_BASE_URL}/inference/results/${encodeURIComponent(folderName)}/download`);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcarea segmentării' }));
+      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descarcarea segmentării' }));
       throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
     }
 
