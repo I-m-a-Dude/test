@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-API Endpoints pentru serviciul de inferenta - cu suport cache și overlay
+API Endpoints pentru serviciul de inferenta - cu suport cache și overlay FIXED
 """
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -129,10 +129,11 @@ async def run_inference_on_folder_endpoint(
         save_result: bool = True,
         output_filename: str = None,
         create_overlay: bool = Query(True, description="Creează și overlay-ul T1N + segmentare"),
-        force_reprocess: bool = Query(False, description="Forțează re-procesarea chiar dacă există cache")
+        force_reprocess: bool = Query(False, description="Forțează re-procesarea chiar dacă există cache"),
+        overlay_alpha: float = Query(0.5, description="Transparența overlay-ului (0.0-1.0)", ge=0.0, le=1.0)
 ):
     """
-    Ruleaza inferenta completa pe un folder cu modalitati + creează overlay
+    FIXED: Ruleaza inferenta completa pe un folder cu modalitati + creează overlay
     Pipeline: cache-check -> preprocess -> inference -> postprocess -> overlay -> save
     """
     if not INFERENCE_AVAILABLE:
@@ -152,6 +153,7 @@ async def run_inference_on_folder_endpoint(
 
         print(f"[INFERENCE API] Start pipeline pentru folder: {folder_name}")
         print(f"[INFERENCE API] Create overlay: {create_overlay}")
+        print(f"[INFERENCE API] Overlay alpha: {overlay_alpha}")
         if force_reprocess:
             print(f"[INFERENCE API] Re-procesare forțată activată")
 
@@ -432,7 +434,7 @@ async def download_segmentation_result(folder_name: str):
 @router.get("/results/{folder_name}/download-overlay")
 async def download_overlay_result(folder_name: str):
     """
-    Descarca rezultatul overlay pentru un folder
+    FIXED: Descarca rezultatul overlay pentru un folder
     """
     try:
         result_folder = Path("results") / folder_name
@@ -583,6 +585,8 @@ async def get_inference_result_info(folder_name: str):
     Obtine informatii despre rezultatele de inferinta (segmentation + overlay)
     """
     try:
+        from src.services.inference import get_existing_result_info
+
         result_folder = Path("results") / folder_name
 
         if not result_folder.exists() or not result_folder.is_dir():
@@ -611,13 +615,11 @@ async def get_inference_result_info(folder_name: str):
 
         # Informatii despre segmentation
         if seg_files:
-            from src.services.inference import get_existing_result_info
             seg_info = get_existing_result_info(seg_files[0])
             folder_info["files"]["segmentation"] = seg_info
 
         # Informatii despre overlay
         if overlay_files:
-            from src.services.inference import get_existing_result_info
             overlay_info = get_existing_result_info(overlay_files[0])
             folder_info["files"]["overlay"] = overlay_info
 

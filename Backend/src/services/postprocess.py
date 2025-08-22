@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Postprocesare MONAI pentru segmentare gliome - cu overlay support
+Postprocesare MONAI pentru segmentare gliome - cu overlay support FIXED
 """
 import torch
 import numpy as np
@@ -19,7 +19,7 @@ from scipy.ndimage import binary_fill_holes, binary_opening, label
 
 
 class GliomaPostprocessor:
-    """Postprocesare pentru segmentarea gliomelor post-tratament cu suport overlay"""
+    """Postprocesare pentru segmentarea gliomelor post-tratament cu suport overlay FIXED"""
 
     def __init__(self):
         if not MONAI_AVAILABLE:
@@ -35,10 +35,10 @@ class GliomaPostprocessor:
         # Color mapping pentru overlay
         self.overlay_colors = {
             0: [0, 0, 0],  # Background - negru
-            1: [0, 100, 255],  # NETC - albastru
-            2: [255, 255, 0],  # SNFH - galben
-            3: [255, 0, 0],  # ET - roșu
-            4: [128, 0, 128],  # RC - violet
+            1: [100, 180, 255],  # NETC - lighter blue
+            2: [255, 255, 150],  # SNFH - lighter yellow
+            3: [255, 100, 100],  # ET - lighter red
+            4: [200, 100, 200],  # RC - lighter violet
         }
 
     def convert_predictions_to_classes(self, predictions: torch.Tensor) -> torch.Tensor:
@@ -99,69 +99,83 @@ class GliomaPostprocessor:
 
         return filtered
 
-    def normalize_t1n_for_display(self, t1n_data: np.ndarray) -> np.ndarray:
+    def normalize_t1n_for_overlay(self, t1n_data: np.ndarray) -> np.ndarray:
         """
-        Normalizează datele T1N pentru display (0-255)
-        Păstrează windowing-ul medical pentru diagnostic
+        Normalizează datele T1N pentru overlay păstrând aspectul original (nu grayscale)
+        FIXED: Păstrează imaginea originală, nu o face grayscale
         """
-        # Remove outliers pentru normalizare mai bună
-        p1, p99 = np.percentile(t1n_data, [1, 99])
+        print(f"[OVERLAY] Normalizez T1N: shape={t1n_data.shape}, dtype={t1n_data.dtype}")
+
+        # Remove outliers pentru normalizare mai bună dar păstrează aspectul original
+        non_zero_mask = t1n_data > 0
+        if not np.any(non_zero_mask):
+            print("[OVERLAY] WARNING: Toate valorile T1N sunt 0")
+            return np.zeros_like(t1n_data, dtype=np.uint8)
+
+        non_zero_values = t1n_data[non_zero_mask]
+        p1, p99 = np.percentile(non_zero_values, [1, 99])
+
+        print(f"[OVERLAY] Range original: {t1n_data.min():.2f} - {t1n_data.max():.2f}")
+        print(f"[OVERLAY] Range percentile: {p1:.2f} - {p99:.2f}")
 
         # Clip la percentile pentru a evita outliers
         clipped = np.clip(t1n_data, p1, p99)
 
-        # Normalizează la 0-255
-        normalized = ((clipped - p1) / (p99 - p1)) * 255
+        # Normalizează la 0-255 PĂSTRÂND aspectul original (nu grayscale)
+        if p99 > p1:
+            normalized = ((clipped - p1) / (p99 - p1)) * 255
+        else:
+            normalized = np.zeros_like(clipped)
 
-        return normalized.astype(np.uint8)
+        result = normalized.astype(np.uint8)
+        print(f"[OVERLAY] Normalizare completă: {result.min()} - {result.max()}")
 
-    def create_overlay(self, t1n_data: np.ndarray, segmentation: np.ndarray,
-                       alpha: float = 0.4) -> np.ndarray:
+        return result
+
+    def create_overlay_with_subtle_t1n(self, t1n_data: np.ndarray, segmentation: np.ndarray,
+                                       segmentation_alpha: float = 0.4,
+                                       t1n_background_opacity: float = 0.65) -> np.ndarray:
         """
-        Creează overlay-ul cu T1N ca bază și segmentarea colorată peste
+        Creează overlay cu segmentare TRANSPARENTĂ peste T1N vizibil
 
         Args:
-            t1n_data: Datele T1N originale (H, W, D)
+            t1n_data: Datele T1N preprocesate (H, W, D)
             segmentation: Segmentarea procesată (H, W, D)
-            alpha: Transparența overlay-ului (0.0-1.0)
+            segmentation_alpha: Transparența segmentării (0.0-1.0, mai mic = mai transparent)
+            t1n_background_opacity: Opacitatea T1N în background (0.0-1.0)
 
         Returns:
-            Array RGB cu overlay (H, W, D, 3)
+            Array RGB cu overlay transparent (H, W, D, 3)
         """
-        print(f"[OVERLAY] Creez overlay cu alpha={alpha}")
+        print(f"[OVERLAY] Creez overlay cu segmentare transparentă (alpha={segmentation_alpha})")
 
-        # Normalizează T1N pentru display
-        t1n_normalized = self.normalize_t1n_for_display(t1n_data)
+        # Normalizează T1N pentru background vizibil
+        t1n_normalized = ((t1n_data - t1n_data.min()) / (t1n_data.max() - t1n_data.min()) * 255).astype(np.uint8)
 
-        # Creează imaginea RGB de bază (grayscale)
         h, w, d = t1n_data.shape
         overlay_image = np.zeros((h, w, d, 3), dtype=np.uint8)
 
-        # Setează canalele RGB cu valorile grayscale
-        overlay_image[:, :, :, 0] = t1n_normalized  # R
-        overlay_image[:, :, :, 1] = t1n_normalized  # G
-        overlay_image[:, :, :, 2] = t1n_normalized  # B
+        # Setează T1N ca bază pe toate canalele (grayscale vizibil)
+        for channel in range(3):
+            overlay_image[:, :, :, channel] = (t1n_normalized * t1n_background_opacity).astype(np.uint8)
 
-        # Aplică overlay-ul colorat pentru fiecare clasă
-        for class_id in range(1, 5):  # Skip background (0)
-            if class_id not in segmentation:
-                continue
-
-            # Găsește pixelii din această clasă
+        # Aplică culorile segmentării TRANSPARENT peste T1N
+        for class_id in range(1, 5):
             class_mask = (segmentation == class_id)
             if not np.any(class_mask):
                 continue
 
             color = self.overlay_colors[class_id]
 
-            # Blending: overlay = (1-alpha) * base + alpha * color
+            # Blending transparent: overlay = (1-alpha) * t1n + alpha * culoare_segmentare
             for channel in range(3):
-                overlay_image[class_mask, channel] = (
-                        (1 - alpha) * overlay_image[class_mask, channel] +
-                        alpha * color[channel]
-                ).astype(np.uint8)
+                current_t1n = overlay_image[class_mask, channel].astype(float)
+                segmentation_color = float(color[channel])
 
-        print(f"[OVERLAY] Overlay creat cu succes: {overlay_image.shape}")
+                blended = (1 - segmentation_alpha) * current_t1n + segmentation_alpha * segmentation_color
+                overlay_image[class_mask, channel] = blended.astype(np.uint8)
+
+        print(f"[OVERLAY] Overlay transparent creat: {overlay_image.shape}")
         return overlay_image
 
     def postprocess_segmentation(self, predictions: torch.Tensor) -> Tuple[np.ndarray, Dict]:
@@ -215,7 +229,7 @@ class GliomaPostprocessor:
     def save_overlay_as_nifti(self, overlay_image: np.ndarray, folder_name: str,
                               output_base_dir: Path = None, reference_nifti: Optional[Path] = None) -> Path:
         """
-        Salvează overlay-ul ca NIfTI RGB
+        FIXED: Salvează overlay-ul ca NIfTI RGB
 
         Args:
             overlay_image: Array RGB (H, W, D, 3)
@@ -236,18 +250,23 @@ class GliomaPostprocessor:
         # Calea către fisierul overlay
         output_path = result_folder / f"{folder_name}-overlay.nii.gz"
 
-        # Pentru NIfTI RGB, trebuie să reorganizez dimensiunile: (H, W, D, 3) -> (H, W, D, 1, 3)
-        # Sau să salvez ca 4D cu ultimul canal ca RGB
+        print(f"[OVERLAY] Salvând overlay: {overlay_image.shape} -> {output_path}")
+
+        # Convertim RGBA la format compatibil NIfTI
+        # NIfTI nu suportă nativ RGB, dar putem salva ca 4D cu ultimul canal ca RGB
         nifti_data = overlay_image.astype(np.uint8)
 
         if reference_nifti and reference_nifti.exists():
             ref_img = nib.load(reference_nifti)
-            # Pentru RGB, folosim header-ul de referință dar modificăm datatype
+            # Pentru RGB, creăm un header nou compatibil
+            affine = ref_img.affine.copy()
             header = ref_img.header.copy()
             header.set_data_dtype(np.uint8)
-            nifti_img = nib.Nifti1Image(nifti_data, ref_img.affine, header)
+            nifti_img = nib.Nifti1Image(nifti_data, affine, header)
         else:
-            nifti_img = nib.Nifti1Image(nifti_data, np.eye(4))
+            # Creăm un affine simplu 4x4 pentru RGB
+            affine = np.eye(4)
+            nifti_img = nib.Nifti1Image(nifti_data, affine)
 
         nib.save(nifti_img, str(output_path))
         print(f"[POSTPROCESS] Overlay salvat în: {output_path}")

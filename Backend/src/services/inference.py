@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Serviciu de inferenta pentru segmentarea gliomelor post-tratament
-Pipeline complet: preprocess -> inference -> postprocess -> overlay (cu cache)
+Pipeline complet: preprocess -> inference -> postprocess -> overlay (cu cache) - FIXED
 """
 import torch
 import numpy as np
@@ -106,8 +106,55 @@ def get_existing_result_info(existing_path: Path) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+def extract_t1n_from_preprocessed(preprocessed_data: Dict) -> Optional[np.ndarray]:
+    """
+    FIXED: Extrage datele T1N din tensorii preprocesați
+
+    Args:
+        preprocessed_data: Dict cu datele preprocesate de la preprocessor
+
+    Returns:
+        Array numpy cu datele T1N sau None dacă nu se găsește
+    """
+    try:
+        # Obținem tensor-ul și paths-urile originale
+        image_tensor = preprocessed_data.get("image_tensor")
+        original_paths = preprocessed_data.get("original_paths", {})
+
+        if image_tensor is None:
+            print("[OVERLAY ERROR] Nu s-a găsit image_tensor în datele preprocesate")
+            return None
+
+        print(f"[OVERLAY] Image tensor shape: {image_tensor.shape}")
+        print(f"[OVERLAY] Original paths: {list(original_paths.keys())}")
+
+        # Verificăm că avem 4 canale (t1n, t1c, t2w, t2f)
+        if image_tensor.dim() != 4 or image_tensor.shape[0] != 4:
+            print(f"[OVERLAY ERROR] Shape tensor neașteptat: {image_tensor.shape}")
+            return None
+
+        # Primul canal este întotdeauna T1N conform ordinii din preprocessor
+        # Vezi în preprocess.py: image_keys = ["image_t1n", "image_t1c", "image_t2w", "image_t2f"]
+        t1n_channel = image_tensor[0]  # (H, W, D)
+
+        # Convertim la numpy
+        if isinstance(t1n_channel, torch.Tensor):
+            t1n_data = t1n_channel.cpu().numpy()
+        else:
+            t1n_data = np.array(t1n_channel)
+
+        print(f"[OVERLAY] T1N extras cu succes: shape={t1n_data.shape}, dtype={t1n_data.dtype}")
+        print(f"[OVERLAY] T1N range: {t1n_data.min():.3f} - {t1n_data.max():.3f}")
+
+        return t1n_data
+
+    except Exception as e:
+        print(f"[OVERLAY ERROR] Eroare la extragerea T1N: {str(e)}")
+        return None
+
+
 class GliomaInferenceService:
-    """Serviciu complet de inferenta pentru gliome cu suport cache și overlay"""
+    """Serviciu complet de inferenta pentru gliome cu suport cache și overlay FIXED"""
 
     def __init__(self):
         if not ML_AVAILABLE:
@@ -123,7 +170,7 @@ class GliomaInferenceService:
                                force_reprocess: bool = False,
                                create_overlay: bool = True) -> Dict[str, Any]:
         """
-        Pipeline complet de inferenta cu suport cache și overlay
+        FIXED: Pipeline complet de inferenta cu suport cache și overlay
 
         Args:
             folder_path: Folder cu modalitatile
@@ -133,7 +180,7 @@ class GliomaInferenceService:
             create_overlay: Daca sa creeze și overlay-ul
         """
         folder_name = folder_path.name
-        print(f"Start pipeline inferenta pentru: {folder_name}")
+        print(f"[INFERENCE] Start pipeline inferenta pentru: {folder_name}")
 
         # CACHE CHECK: Verifica daca exista deja rezultatele
         if not force_reprocess:
@@ -174,21 +221,21 @@ class GliomaInferenceService:
 
         try:
             # 1. PREPROCESS
-            print("Etapa 1: Preprocesare...")
+            print("[INFERENCE] Etapa 1: Preprocesare...")
             preprocess_start = time.time()
             preprocessed_data = self.preprocessor.preprocess_folder(folder_path)
             preprocess_time = time.time() - preprocess_start
 
             image_tensor = preprocessed_data["image_tensor"]
-            print(f"Preprocesare completa: {preprocess_time:.2f}s")
-            print(f"   Shape: {list(image_tensor.shape)}")
+            print(f"[INFERENCE] Preprocesare completa: {preprocess_time:.2f}s")
+            print(f"[INFERENCE] Shape: {list(image_tensor.shape)}")
 
             # 2. INFERENCE
-            print("Etapa 2: Inferenta model...")
+            print("[INFERENCE] Etapa 2: Inferenta model...")
 
             # Asigura ca modelul e incarcat
             if not self.model_wrapper.is_loaded:
-                print("   incarca model...")
+                print("[INFERENCE] incarca model...")
                 ensure_model_loaded()
 
             inference_start = time.time()
@@ -202,11 +249,11 @@ class GliomaInferenceService:
                 predictions = self.model_wrapper.predict(image_tensor)
 
             inference_time = time.time() - inference_start
-            print(f"Inferenta completa: {inference_time:.2f}s")
-            print(f"   Output shape: {list(predictions.shape)}")
+            print(f"[INFERENCE] Inferenta completa: {inference_time:.2f}s")
+            print(f"[INFERENCE] Output shape: {list(predictions.shape)}")
 
             # 3. POSTPROCESS
-            print("Etapa 3: Postprocesare...")
+            print("[INFERENCE] Etapa 3: Postprocesare...")
             postprocess_start = time.time()
 
             # Elimina dimensiunea batch pentru postprocesare
@@ -216,11 +263,12 @@ class GliomaInferenceService:
             segmentation, postprocess_stats = self.postprocessor.postprocess_segmentation(predictions)
             postprocess_time = time.time() - postprocess_start
 
-            print(f"Postprocesare completa: {postprocess_time:.2f}s")
+            print(f"[INFERENCE] Postprocesare completa: {postprocess_time:.2f}s")
 
             # 4. OVERLAY CREATION
             overlay_time = 0
             overlay_path = None
+            overlay_image = None
 
             if create_overlay:
                 print("Etapa 4: Creez overlay...")
@@ -230,22 +278,20 @@ class GliomaInferenceService:
                 original_tensor = preprocessed_data["image_tensor"]
                 if original_tensor.dim() == 4:  # (C, H, W, D)
                     t1n_data = original_tensor[0].cpu().numpy()  # Primul canal = T1N
+
+                    # SAU folosește versiunea cu T1N subtil:
+                    overlay_image = self.postprocessor.create_overlay_with_subtle_t1n(t1n_data, segmentation)
+
+                    overlay_time = time.time() - overlay_start
+                    print(f"Overlay creat: {overlay_time:.2f}s")
                 else:
                     print("[WARNING] Shape tensor nepotrivit pentru overlay")
                     t1n_data = None
 
-                if t1n_data is not None:
-                    # Creează overlay-ul
-                    overlay_image = self.postprocessor.create_overlay(t1n_data, segmentation)
-                    overlay_time = time.time() - overlay_start
-                    print(f"Overlay creat: {overlay_time:.2f}s")
-                else:
-                    print("[WARNING] Nu s-a putut crea overlay-ul")
-
             # 5. SALVARE (optional)
             saved_path = None
             if save_result:
-                print("Etapa 5: Salvare rezultate...")
+                print("[INFERENCE] Etapa 5: Salvare rezultate...")
 
                 if output_dir is None:
                     output_dir = Path("results")
@@ -254,20 +300,28 @@ class GliomaInferenceService:
                 reference_nifti = None
                 original_paths = preprocessed_data.get("original_paths", {})
                 if original_paths:
-                    reference_nifti = list(original_paths.values())[0]
+                    # Preferă T1N ca referință
+                    if "t1n" in original_paths:
+                        reference_nifti = original_paths["t1n"]
+                    else:
+                        reference_nifti = list(original_paths.values())[0]
 
                 # Salveaza segmentarea
                 saved_path = self.postprocessor.save_as_nifti(
                     segmentation, folder_path.name, output_dir, reference_nifti
                 )
-                print(f"Segmentare salvată: {saved_path}")
+                print(f"[INFERENCE] Segmentare salvată: {saved_path}")
 
                 # Salveaza overlay-ul (daca e creat)
-                if create_overlay and 'overlay_image' in locals():
-                    overlay_path = self.postprocessor.save_overlay_as_nifti(
-                        overlay_image, folder_path.name, output_dir, reference_nifti
-                    )
-                    print(f"Overlay salvat: {overlay_path}")
+                if overlay_image is not None:
+                    try:
+                        overlay_path = self.postprocessor.save_overlay_as_nifti(
+                            overlay_image, folder_path.name, output_dir, reference_nifti
+                        )
+                        print(f"[INFERENCE] Overlay salvat: {overlay_path}")
+                    except Exception as e:
+                        print(f"[INFERENCE ERROR] Eroare la salvarea overlay-ului: {str(e)}")
+                        overlay_path = None
 
             # Timing total
             total_time = time.time() - start_time
@@ -294,18 +348,18 @@ class GliomaInferenceService:
                 "saved_path": str(saved_path) if saved_path else None,
                 "overlay_path": str(overlay_path) if overlay_path else None,
                 "segmentation_array": segmentation,  # Pentru utilizare ulterioara
-                "overlay_array": overlay_image if 'overlay_image' in locals() else None
+                "overlay_array": overlay_image if overlay_image is not None else None
             }
 
-            print(f"Pipeline complet in {total_time:.2f}s")
+            print(f"[INFERENCE] Pipeline complet in {total_time:.2f}s")
             print(
-                f"   Preprocess: {preprocess_time:.1f}s | Inference: {inference_time:.1f}s | Postprocess: {postprocess_time:.1f}s | Overlay: {overlay_time:.1f}s")
+                f"[INFERENCE] Preprocess: {preprocess_time:.1f}s | Inference: {inference_time:.1f}s | Postprocess: {postprocess_time:.1f}s | Overlay: {overlay_time:.1f}s")
 
             return result
 
         except Exception as e:
             error_time = time.time() - start_time
-            print(f"Eroare in pipeline dupa {error_time:.2f}s: {str(e)}")
+            print(f"[INFERENCE ERROR] Eroare in pipeline dupa {error_time:.2f}s: {str(e)}")
 
             return {
                 "success": False,
@@ -320,7 +374,7 @@ class GliomaInferenceService:
         """
         Ruleaza doar inferenta + postprocesare pe date deja preprocesate
         """
-        print(f"Inferenta directa pentru: {folder_name}")
+        print(f"[INFERENCE] Inferenta directa pentru: {folder_name}")
         start_time = time.time()
 
         try:
