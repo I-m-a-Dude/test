@@ -167,6 +167,41 @@ export const downloadSegmentationResult = async (folderName: string): Promise<Fi
 };
 
 /**
+ * Download overlay result - ADAUGĂ ACEASTĂ FUNCȚIE ÎN api.ts
+ */
+export const downloadOverlayResult = async (folderName: string): Promise<File> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/inference/results/${encodeURIComponent(folderName)}/download-overlay`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcarea overlay-ului' }));
+      throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
+    }
+
+    // Get the blob
+    const blob = await response.blob();
+
+    // Create File object for the overlay
+    const overlayFilename = `${folderName}-overlay.nii.gz`;
+    const file = new File([blob], overlayFilename, {
+      type: blob.type || 'application/gzip',
+      lastModified: Date.now()
+    });
+
+    console.log(`[API] Overlay descărcat: ${overlayFilename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    return file;
+
+  } catch (error) {
+    console.error('Eroare la descărcarea overlay-ului:', error);
+    throw error;
+  }
+};
+
+
+
+
+/**
  * Extract folder name from a file path with improved logic and debugging
  */
 const extractFolderFromFilePath = async (filename: string): Promise<string | null> => {
@@ -185,7 +220,8 @@ const extractFolderFromFilePath = async (filename: string): Promise<string | nul
     '-t1n', '-t1c', '-t2w', '-t2f', '-flair',
     '_T1N', '_T1C', '_T2W', '_T2F', '_FLAIR',
     '-T1N', '-T1C', '-T2W', '-T2F', '-FLAIR',
-    '-seg', '_seg', '-segmentation', '_segmentation'
+    '-seg', '_seg', '-segmentation', '_segmentation',
+      '-overlay', '_overlay'
   ];
 
   const baseName = filename.replace(/\.(nii|nii\.gz)$/i, '');
