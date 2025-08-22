@@ -6,35 +6,21 @@ import { useCineMode } from '@/utils/hooks/use-cine-mode';
 import { MetadataViewerDialog } from '@/components/metadata-viewer-dialog';
 import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
-import { useOverlayStore } from '@/utils/stores/overlay-store'; // NOU
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target, Palette, Loader2 } from 'lucide-react';
+import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target, Palette } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { pages } from '@/utils/pages';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useToast } from '@/utils/hooks/use-toast';
 
 export default function ResultPage() {
   useCineMode();
-  const { analysisResult, segmentationFile, inferenceResult, originalFile } = useResultStore();
+  const { analysisResult, segmentationFile, inferenceResult, originalFile, isViewingSegmentation, switchToOriginal, switchToSegmentation } = useResultStore();
   const { setCurrentFile } = useResultsViewerStore();
-
-  // NOU: Overlay store
-  const {
-    overlayFile,
-    isLoadingOverlay,
-    overlayError,
-    downloadOverlayForFolder,
-    clearOverlay
-  } = useOverlayStore();
-
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  // MODIFICAT: State pentru toggle între segmentation și overlay
-  const [isViewingOverlay, setIsViewingOverlay] = useState(false);
 
   useEffect(() => {
     // If there is no analysis result, redirect to analysis
@@ -43,77 +29,40 @@ export default function ResultPage() {
       return;
     }
 
-    // MODIFICAT: Set the appropriate file in the results viewer
-    const fileToShow = isViewingOverlay && overlayFile ? overlayFile : segmentationFile;
+    // Set the appropriate file in the results viewer
+    const fileToShow = isViewingSegmentation && segmentationFile ? segmentationFile : originalFile;
 
     if (fileToShow) {
       setCurrentFile(fileToShow);
     }
 
     // Show appropriate toast
-    if (isViewingOverlay && overlayFile) {
-      toast({
-        title: 'Overlay loaded',
-        description: 'Now displaying T1N + AI segmentation overlay.',
-      });
-    } else if (segmentationFile) {
+    if (isViewingSegmentation && segmentationFile) {
       toast({
         title: 'Segmentation loaded',
         description: 'Now displaying AI segmentation result.',
       });
     }
-  }, [analysisResult, navigate, segmentationFile, overlayFile, isViewingOverlay, setCurrentFile, toast]);
-
-  // Auto-download overlay when we have inference result
-  useEffect(() => {
-    if (inferenceResult && inferenceResult.folder_name && !overlayFile && !isLoadingOverlay) {
-      // Încarcă automat overlay-ul pentru folder
-      downloadOverlayForFolder(inferenceResult.folder_name).catch((error) => {
-        console.warn('Nu s-a putut încărca overlay-ul automat:', error);
-      });
-    }
-  }, [inferenceResult, overlayFile, isLoadingOverlay, downloadOverlayForFolder]);
+  }, [analysisResult, navigate, segmentationFile, originalFile, isViewingSegmentation, setCurrentFile, toast]);
 
   // Render a loading state or null while redirecting to avoid flashing content
   if (!analysisResult) {
     return null;
   }
 
-  // MODIFICAT: Toggle între segmentation și overlay
   const handleToggleView = () => {
-    if (isViewingOverlay) {
-      // Switch to segmentation
-      setIsViewingOverlay(false);
+    if (isViewingSegmentation) {
+      switchToOriginal();
+      toast({
+        title: 'Original file loaded',
+        description: 'Now displaying original MRI file.',
+      });
+    } else {
+      switchToSegmentation();
       toast({
         title: 'Segmentation loaded',
         description: 'Now displaying AI segmentation result.',
       });
-    } else {
-      // Switch to overlay
-      if (overlayFile) {
-        setIsViewingOverlay(true);
-        toast({
-          title: 'Overlay loaded',
-          description: 'Now displaying T1N + AI segmentation overlay.',
-        });
-      } else {
-        // Încarcă overlay-ul dacă nu e disponibil
-        if (inferenceResult?.folder_name) {
-          downloadOverlayForFolder(inferenceResult.folder_name).then(() => {
-            setIsViewingOverlay(true);
-            toast({
-              title: 'Overlay loaded',
-              description: 'Now displaying T1N + AI segmentation overlay.',
-            });
-          }).catch((error) => {
-            toast({
-              title: 'Error loading overlay',
-              description: error.message,
-              variant: 'destructive',
-            });
-          });
-        }
-      }
     }
   };
 
@@ -150,25 +99,14 @@ export default function ResultPage() {
       <header className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
         <Logo />
         <div className="flex items-center gap-4">
-          {/* MODIFICAT: Buton pentru toggle overlay */}
           {segmentationFile && (
             <Button
               variant="outline"
               onClick={handleToggleView}
-              disabled={isLoadingOverlay}
               className="rounded-full"
             >
-              {isLoadingOverlay ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4 mr-2" />
-                  {isViewingOverlay ? 'View Segmentation' : 'View Overlay'}
-                </>
-              )}
+              <Eye className="h-4 w-4 mr-2" />
+              {isViewingSegmentation ? 'View Original' : 'View Segmentation'}
             </Button>
           )}
           <Button variant="outline" asChild className="rounded-full">
@@ -184,36 +122,17 @@ export default function ResultPage() {
           <div className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
             <ResultsMriViewer />
 
-            {/* MODIFICAT: Indicator pentru tipul de view */}
+            {/* Indicator for view type */}
             {segmentationFile && (
               <div className="absolute top-4 left-4 z-10">
                 <Badge
                   variant="outline"
-                  className={`${isViewingOverlay 
-                    ? 'bg-purple-100 text-purple-800 border-purple-200' 
-                    : 'bg-green-100 text-green-800 border-green-200'
+                  className={`${isViewingSegmentation 
+                    ? 'bg-green-100 text-green-800 border-green-200' 
+                    : 'bg-blue-100 text-blue-800 border-blue-200'
                   } backdrop-blur-sm`}
                 >
-                  {isViewingOverlay ? '🎨 T1N + Segmentation Overlay' : '🎯 AI Segmentation'}
-                </Badge>
-              </div>
-            )}
-
-            {/* Loading overlay indicator */}
-            {isLoadingOverlay && (
-              <div className="absolute top-4 right-4 z-10">
-                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200 backdrop-blur-sm">
-                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  Loading overlay...
-                </Badge>
-              </div>
-            )}
-
-            {/* Error overlay indicator */}
-            {overlayError && (
-              <div className="absolute top-4 right-4 z-10">
-                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200 backdrop-blur-sm">
-                  ❌ Overlay error
+                  {isViewingSegmentation ? '🎯 AI Segmentation' : '📊 Original MRI'}
                 </Badge>
               </div>
             )}
@@ -322,24 +241,17 @@ export default function ResultPage() {
                 </>
               )}
 
-              {/* MODIFICAT: Color Legend pentru ambele view-uri */}
-              {segmentationFile && (
+              {/* Segmentation Color Legend */}
+              {segmentationFile && isViewingSegmentation && (
                 <>
                   <Separator />
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Palette className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold text-sm">
-                        {isViewingOverlay ? 'Overlay Colors' : 'Segmentation Colors'}
-                      </h3>
+                      <h3 className="font-semibold text-sm">Color Legend</h3>
                     </div>
 
                     <div className="space-y-2">
-                      {isViewingOverlay && (
-                        <div className="text-xs text-muted-foreground mb-2">
-                          Segmentation overlaid on T1N background
-                        </div>
-                      )}
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(0, 100, 255)' }}></div>
                         <span className="text-xs">NETC - Non-Enhancing Tumor Core</span>
@@ -390,11 +302,6 @@ export default function ResultPage() {
                 <Button variant="outline" className="w-full justify-start gap-2" disabled>
                   <Download className="h-4 w-4" />
                   Download Segmentation
-                </Button>
-                {/* NOU: Buton pentru download overlay */}
-                <Button variant="outline" className="w-full justify-start gap-2" disabled>
-                  <Download className="h-4 w-4" />
-                  Download Overlay
                 </Button>
               </div>
             </CardContent>
