@@ -145,7 +145,7 @@ class GliomaPostprocessor:
             t1n_background_opacity: Opacitatea T1N în background (0.0-1.0)
 
         Returns:
-            Array RGB cu overlay transparent (H, W, D, 3)
+            Array RGB cu overlay transparent (H, W, D, 3).
         """
         print(f"[OVERLAY] Creez overlay cu segmentare transparentă (alpha={segmentation_alpha})")
 
