@@ -134,7 +134,7 @@ export const runInferenceOnFolder = async (folderName: string): Promise<Inferenc
   return response.json();
 };
 
-/**
+/*
  * Download segmentation result
  */
 export const downloadSegmentationResult = async (folderName: string): Promise<File> => {
