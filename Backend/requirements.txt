@@ -5,10 +5,10 @@ scikit-image
 scikit-learn
 matplotlib
 polars
-monai
-torch
+#monai
+#torch
 numba
-torchmetrics
+#torchmetrics
 pydantic-settings
 fastapi
 uvicorn

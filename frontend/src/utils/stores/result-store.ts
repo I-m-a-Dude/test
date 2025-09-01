@@ -9,7 +9,6 @@ interface ResultState {
   // Files for results page ONLY
   originalFile: File | null;
   segmentationFile: File | null;
-  isViewingSegmentation: boolean;
 
   // Results actions
   setAnalysisResult: (
@@ -18,18 +17,14 @@ interface ResultState {
     segmentationFile?: File | null,
     inferenceResult?: InferenceResponse | null
   ) => void;
-  setViewingSegmentation: (viewing: boolean) => void;
-  switchToOriginal: () => void;
-  switchToSegmentation: () => void;
   clearResults: () => void;
 }
 
-export const useResultStore = create<ResultState>((set, get) => ({
+export const useResultStore = create<ResultState>((set) => ({
   analysisResult: null,
   inferenceResult: null,
   originalFile: null,
   segmentationFile: null,
-  isViewingSegmentation: false,
 
   setAnalysisResult: (result, originalFile, segmentationFile = null, inferenceResult = null) =>
     set({
@@ -37,14 +32,7 @@ export const useResultStore = create<ResultState>((set, get) => ({
       originalFile: originalFile,
       segmentationFile: segmentationFile,
       inferenceResult: inferenceResult,
-      isViewingSegmentation: segmentationFile ? true : false, // Auto-switch to segmentation if available
     }),
-
-  setViewingSegmentation: (viewing) => set({ isViewingSegmentation: viewing }),
-
-  switchToOriginal: () => set({ isViewingSegmentation: false }),
-
-  switchToSegmentation: () => set({ isViewingSegmentation: true }),
 
   clearResults: () =>
     set({
@@ -52,6 +40,5 @@ export const useResultStore = create<ResultState>((set, get) => ({
       inferenceResult: null,
       originalFile: null,
       segmentationFile: null,
-      isViewingSegmentation: false,
-    })
+    }),
 }));

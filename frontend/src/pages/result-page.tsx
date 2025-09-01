@@ -7,7 +7,7 @@ import { MetadataViewerDialog } from '@/components/metadata-viewer-dialog';
 import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target, Palette } from 'lucide-react';
+import { BrainCircuit, FileText, Download, BarChart3, Clock, Target, Palette } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -17,7 +17,7 @@ import { useToast } from '@/utils/hooks/use-toast';
 
 export default function ResultPage() {
   useCineMode();
-  const { analysisResult, segmentationFile, inferenceResult, originalFile, isViewingSegmentation, switchToOriginal, switchToSegmentation } = useResultStore();
+  const { analysisResult, segmentationFile, inferenceResult } = useResultStore();
   const { setCurrentFile } = useResultsViewerStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -29,42 +29,20 @@ export default function ResultPage() {
       return;
     }
 
-    // Set the appropriate file in the results viewer
-    const fileToShow = isViewingSegmentation && segmentationFile ? segmentationFile : originalFile;
-
-    if (fileToShow) {
-      setCurrentFile(fileToShow);
-    }
-
-    // Show appropriate toast
-    if (isViewingSegmentation && segmentationFile) {
+    // Always display segmentation file if available
+    if (segmentationFile) {
+      setCurrentFile(segmentationFile);
       toast({
         title: 'Segmentation loaded',
-        description: 'Now displaying AI segmentation result.',
+        description: 'Displaying AI segmentation result.',
       });
     }
-  }, [analysisResult, navigate, segmentationFile, originalFile, isViewingSegmentation, setCurrentFile, toast]);
+  }, [analysisResult, navigate, segmentationFile, setCurrentFile, toast]);
 
   // Render a loading state or null while redirecting to avoid flashing content
   if (!analysisResult) {
     return null;
   }
-
-  const handleToggleView = () => {
-    if (isViewingSegmentation) {
-      switchToOriginal();
-      toast({
-        title: 'Original file loaded',
-        description: 'Now displaying original MRI file.',
-      });
-    } else {
-      switchToSegmentation();
-      toast({
-        title: 'Segmentation loaded',
-        description: 'Now displaying AI segmentation result.',
-      });
-    }
-  };
 
   const formatTime = (seconds: number) => {
     return `${seconds.toFixed(2)}s`;
@@ -99,16 +77,6 @@ export default function ResultPage() {
       <header className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
         <Logo />
         <div className="flex items-center gap-4">
-          {segmentationFile && (
-            <Button
-              variant="outline"
-              onClick={handleToggleView}
-              className="rounded-full"
-            >
-              <Eye className="h-4 w-4 mr-2" />
-              {isViewingSegmentation ? 'View Original' : 'View Segmentation'}
-            </Button>
-          )}
           <Button variant="outline" asChild className="rounded-full">
             <Link to={pages.analysis}>
               Back to Analysis
@@ -122,17 +90,14 @@ export default function ResultPage() {
           <div className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
             <ResultsMriViewer />
 
-            {/* Indicator for view type */}
+            {/* Segmentation indicator */}
             {segmentationFile && (
               <div className="absolute top-4 left-4 z-10">
                 <Badge
                   variant="outline"
-                  className={`${isViewingSegmentation 
-                    ? 'bg-green-100 text-green-800 border-green-200' 
-                    : 'bg-blue-100 text-blue-800 border-blue-200'
-                  } backdrop-blur-sm`}
+                  className="bg-green-100 text-green-800 border-green-200 backdrop-blur-sm"
                 >
-                  {isViewingSegmentation ? '🎯 AI Segmentation' : '📊 Original MRI'}
+                  🎯 AI Segmentation
                 </Badge>
               </div>
             )}
@@ -242,7 +207,7 @@ export default function ResultPage() {
               )}
 
               {/* Segmentation Color Legend */}
-              {segmentationFile && isViewingSegmentation && (
+              {segmentationFile && (
                 <>
                   <Separator />
                   <div className="space-y-4">
