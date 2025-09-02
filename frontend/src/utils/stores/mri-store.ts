@@ -93,35 +93,7 @@ export const useMriStore = create<MriState>((set, get) => ({
   },
 
   restoreFromBackend: async () => {
-    try {
-      // Verifică dacă există un fișier salvat în localStorage
-      const savedFilename = localStorage.getItem('mediview_last_file');
-      
-      if (!savedFilename) {
-        console.log('[STORE] Nu există fișier salvat pentru restore');
-        return;
-      }
-
-      console.log(`[STORE] Încearcă restore pentru: ${savedFilename}`);
-
-      // Verifică dacă fișierul există încă pe server
-      const { checkFileExists } = await import('@/utils/api');
-      const fileExists = await checkFileExists(savedFilename);
-      
-      if (!fileExists) {
-        console.log('[STORE] Fișierul nu mai există pe server, curăță localStorage');
-        localStorage.removeItem('mediview_last_file');
-        return;
-      }
-
-      // Fișierul există, încarcă-l
-      await get().loadFileFromBackend(savedFilename);
-      
-    } catch (error) {
-      console.error('[STORE] Eroare la restore din backend:', error);
-      // Curăță localStorage dacă restore-ul eșuează
-      localStorage.removeItem('mediview_last_file');
-    }
+    console.log('[STORE] Restaurează fișierul din backend dacă există');
   },
 
   resetUploadState: () => set({

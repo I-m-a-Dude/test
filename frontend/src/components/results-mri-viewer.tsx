@@ -136,12 +136,26 @@ export function ResultsMriViewer() {
           coronal: dims[2] || 1,
         });
 
-        const windowing = calculateAndSetChartData(header, image, setHistogramData, setProfileCurveData);
+        // CRITICAL FIX: Pentru overlay RGB, setează windowing fix în loc să calculezi
+        let windowing;
+        if (overlayDetected) {
+          // Pentru overlay RGB, folosește range-ul standard RGB [0-255]
+          windowing = {
+            windowCenter: 127.5,  // Mijlocul range-ului RGB
+            windowWidth: 255,     // Width-ul complet RGB
+            min: 0,
+            max: 255
+          };
+          console.log('Using fixed RGB windowing for overlay:', windowing);
+        } else {
+          // Pentru date MRI normale, calculează windowing-ul normal
+          windowing = calculateAndSetChartData(header, image, setHistogramData, setProfileCurveData);
+          console.log('Calculated windowing for MRI data:', windowing);
+        }
+
         setWindowCenter(windowing.windowCenter);
         setWindowWidth(windowing.windowWidth);
         setIntensityRange({ min: windowing.min, max: windowing.max });
-
-        console.log('Optimal windowing:', windowing);
 
         setMetadata({
           'File Name': currentFile.name,
@@ -174,6 +188,7 @@ export function ResultsMriViewer() {
 
     loadNiftiFile();
   }, [currentFile, setMaxSlices, setHistogramData, setProfileCurveData, setMetadata, setWindowCenter, setWindowWidth, setIntensityRange]);
+
 
   useEffect(() => {
     if (!loading && !error && niftiHeader && niftiImage && canvasRef.current) {
