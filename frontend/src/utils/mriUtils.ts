@@ -75,7 +75,10 @@ export const calculateOptimalWindowing = (typedData: Float32Array): { windowCent
 
 // Detect if file is a segmentation based on filename or data characteristics
 export const isSegmentationFile = (filename: string, typedData: Float32Array): boolean => {
-  // Check filename patterns
+   if (filename.toLowerCase().includes('-overlay')) {
+    return false; // Overlay-urile nu sunt segmentări pure
+  }
+
   const filenameIndicators = [
     'seg', 'segmentation', '_seg', '-seg',
     'mask', '_mask', '-mask'
@@ -555,6 +558,212 @@ export const drawSliceWithSegmentation = ({
   }
 };
 
+// Adaugă această funcție nouă DUPĂ drawSliceWithSegmentation:
+
+export const drawSliceWithOverlay = ({
+  canvas,
+  header,
+  image,
+  slice,
+  axis,
+  brightness = 100,
+  contrast = 100,
+  windowCenter = 0,
+  windowWidth = 1,
+  sliceThickness = 1,
+  useWindowing = false,
+}: DrawSliceParams): void => {
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Could not get canvas 2D context');
+  }
+
+  const dims = header.dims;
+  if (!dims || dims.length < 4) {
+    throw new Error('Invalid header dimensions');
+  }
+
+  const xDim = dims[1];
+  const yDim = dims[2];
+  const zDim = dims[3];
+
+  // Pentru overlay RGB, datele sunt organizate ca (H, W, D, 3) în loc de (H, W, D)
+  // Sau pot fi (H, W, D) dacă backend-ul salvează altfel
+
+  let typedData: Uint8Array;
+
+  // Overlay-ul de obicei e salvat ca RGB uint8
+  typedData = new Uint8Array(image);
+
+  const isRGBData = dims.length > 4 && dims[4] === 3; // Verifică dacă e format RGB
+
+  const getVoxelRGB = (x: number, y: number, z: number): [number, number, number] => {
+    if (x < 0 || x >= xDim || y < 0 || y >= yDim || z < 0 || z >= zDim) {
+      return [0, 0, 0];
+    }
+
+    if (isRGBData) {
+      // Format: (H, W, D, 3)
+      const baseIndex = ((z * yDim + y) * xDim + x) * 3;
+      return [
+        typedData[baseIndex] || 0,     // R
+        typedData[baseIndex + 1] || 0, // G
+        typedData[baseIndex + 2] || 0  // B
+      ];
+    } else {
+      // Fallback: tratează ca grayscale și aplică culori manual
+      const index = z * (xDim * yDim) + y * xDim + x;
+      const value = typedData[index] || 0;
+      return [value, value, value];
+    }
+  };
+
+  let sliceData: Uint8ClampedArray;
+  let sliceWidth: number;
+  let sliceHeight: number;
+  const currentSlice = Math.round(slice);
+
+  try {
+    if (axis === 'axial') {
+      sliceWidth = xDim;
+      sliceHeight = yDim;
+      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
+
+      for (let j = 0; j < sliceHeight; j++) {
+        for (let i = 0; i < sliceWidth; i++) {
+          let avgR = 0, avgG = 0, avgB = 0;
+          const halfThickness = Math.floor(sliceThickness / 2);
+          let samples = 0;
+
+          for (let k = -halfThickness; k <= halfThickness; k++) {
+            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), zDim - 1);
+            const [r, g, b] = getVoxelRGB(i, j, sliceIndex);
+            avgR += r;
+            avgG += g;
+            avgB += b;
+            samples++;
+          }
+
+          const finalR = avgR / samples;
+          const finalG = avgG / samples;
+          const finalB = avgB / samples;
+
+          // Aplică brightness/contrast pe fiecare canal
+          let adjustedR, adjustedG, adjustedB;
+
+          if (useWindowing) {
+            adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
+            adjustedG = applyWindowing(finalG, windowCenter, windowWidth);
+            adjustedB = applyWindowing(finalB, windowCenter, windowWidth);
+          } else {
+            adjustedR = applyBrightnessContrast(finalR, brightness, contrast, 0, 255);
+            adjustedG = applyBrightnessContrast(finalG, brightness, contrast, 0, 255);
+            adjustedB = applyBrightnessContrast(finalB, brightness, contrast, 0, 255);
+          }
+
+          const index = (j * sliceWidth + i) * 4;
+          sliceData[index] = adjustedR;     // R
+          sliceData[index + 1] = adjustedG; // G
+          sliceData[index + 2] = adjustedB; // B
+          sliceData[index + 3] = 255;      // A
+        }
+      }
+    } else if (axis === 'coronal') {
+      // Similar logic for coronal...
+      sliceWidth = xDim;
+      sliceHeight = zDim;
+      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
+
+      for (let j = 0; j < sliceHeight; j++) {
+        for (let i = 0; i < sliceWidth; i++) {
+          let avgR = 0, avgG = 0, avgB = 0;
+          const halfThickness = Math.floor(sliceThickness / 2);
+          let samples = 0;
+
+          for (let k = -halfThickness; k <= halfThickness; k++) {
+            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), yDim - 1);
+            const [r, g, b] = getVoxelRGB(i, sliceIndex, zDim - 1 - j);
+            avgR += r; avgG += g; avgB += b;
+            samples++;
+          }
+
+          const finalR = avgR / samples;
+          const finalG = avgG / samples;
+          const finalB = avgB / samples;
+
+          let adjustedR, adjustedG, adjustedB;
+          if (useWindowing) {
+            adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
+            adjustedG = applyWindowing(finalG, windowCenter, windowWidth);
+            adjustedB = applyWindowing(finalB, windowCenter, windowWidth);
+          } else {
+            adjustedR = applyBrightnessContrast(finalR, brightness, contrast, 0, 255);
+            adjustedG = applyBrightnessContrast(finalG, brightness, contrast, 0, 255);
+            adjustedB = applyBrightnessContrast(finalB, brightness, contrast, 0, 255);
+          }
+
+          const index = (j * sliceWidth + i) * 4;
+          sliceData[index] = adjustedR;
+          sliceData[index + 1] = adjustedG;
+          sliceData[index + 2] = adjustedB;
+          sliceData[index + 3] = 255;
+        }
+      }
+    } else { // sagittal - similar logic
+      sliceWidth = yDim;
+      sliceHeight = zDim;
+      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
+
+      for (let j = 0; j < sliceHeight; j++) {
+        for (let i = 0; i < sliceWidth; i++) {
+          let avgR = 0, avgG = 0, avgB = 0;
+          const halfThickness = Math.floor(sliceThickness / 2);
+          let samples = 0;
+
+          for (let k = -halfThickness; k <= halfThickness; k++) {
+            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), xDim - 1);
+            const [r, g, b] = getVoxelRGB(sliceIndex, i, zDim - 1 - j);
+            avgR += r; avgG += g; avgB += b;
+            samples++;
+          }
+
+          const finalR = avgR / samples;
+          const finalG = avgG / samples;
+          const finalB = avgB / samples;
+
+          let adjustedR, adjustedG, adjustedB;
+          if (useWindowing) {
+            adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
+            adjustedG = applyWindowing(finalG, windowCenter, windowWidth);
+            adjustedB = applyWindowing(finalB, windowCenter, windowWidth);
+          } else {
+            adjustedR = applyBrightnessContrast(finalR, brightness, contrast, 0, 255);
+            adjustedG = applyBrightnessContrast(finalG, brightness, contrast, 0, 255);
+            adjustedB = applyBrightnessContrast(finalB, brightness, contrast, 0, 255);
+          }
+
+          const index = (j * sliceWidth + i) * 4;
+          sliceData[index] = adjustedR;
+          sliceData[index + 1] = adjustedG;
+          sliceData[index + 2] = adjustedB;
+          sliceData[index + 3] = 255;
+        }
+      }
+    }
+
+    canvas.width = sliceWidth;
+    canvas.height = sliceHeight;
+
+    context.filter = 'none';
+    context.imageSmoothingEnabled = false;
+
+    const imageData = new ImageData(sliceData, sliceWidth, sliceHeight);
+    context.putImageData(imageData, 0, 0);
+  } catch (error) {
+    console.error('Error in drawSliceWithOverlay:', error);
+    throw new Error('Failed to draw overlay slice');
+  }
+};
 
 export const calculateAndSetChartData = (
   header: nifti.NIFTI1 | nifti.NIFTI2,
