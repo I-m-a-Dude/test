@@ -40,7 +40,7 @@ NUM_CHANNELS = 4        # 4 modalități (T1, T1c, T2, FLAIR)
 NUM_CLASSES = 5         # 5 clase (background + 4 tipuri de segmentare)
 INIT_FILTERS = 32
 SPATIAL_DIMS = 3        # 3D segmentation
-KERNEL_SIZE = 3
+KERNEL_SIZE = 5
 DEEP_SUPERVISION = False
 
 # Parametrii preprocesare
