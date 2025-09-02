@@ -16,14 +16,14 @@ type DrawSliceParams = {
   useWindowing?: boolean;
 };
 
-// Color mapping for segmentation classes
-const SEGMENTATION_COLORS = {
-  0: [0, 0, 0],       // Background - black
-  1: [0, 100, 255],   // NETC - blue
-  2: [255, 255, 0],   // SNFH - yellow
-  3: [255, 0, 0],     // ET - red
-  4: [128, 0, 128],   // RC - purple
-};
+// // Color mapping for segmentation classes
+// const SEGMENTATION_COLORS = {
+//   0: [0, 0, 0],       // Background - black
+//   1: [0, 100, 255],   // NETC - blue
+//   2: [255, 255, 0],   // SNFH - yellow
+//   3: [255, 0, 0],     // ET - red
+//   4: [128, 0, 128],   // RC - purple
+// };
 
 export const getDataType = (code: number): string => {
   switch (code) {
@@ -195,9 +195,9 @@ export const drawSlice = ({
       typedData = new Float32Array(image);
       break;
     case nifti.NIFTI1.TYPE_FLOAT64:
-      const float64Data = new Float64Array(image);
+      { const float64Data = new Float64Array(image);
       typedData = new Float32Array(float64Data);
-      break;
+      break; }
     default:
       typedData = new Float32Array(image);
   }
@@ -346,216 +346,6 @@ export const drawSlice = ({
   } catch (error) {
     console.error('Error in drawSlice:', error);
     throw new Error('Failed to draw slice');
-  }
-};
-
-// Draw slice with segmentation coloring
-export const drawSliceWithSegmentation = ({
-  canvas,
-  header,
-  image,
-  slice,
-  axis,
-  sliceThickness = 1,
-  opacity = 0.7,
-}: {
-  canvas: HTMLCanvasElement;
-  header: nifti.NIFTI1 | nifti.NIFTI2;
-  image: ArrayBuffer;
-  slice: number;
-  axis: ViewAxis;
-  sliceThickness?: number;
-  opacity?: number;
-}): void => {
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Could not get canvas 2D context');
-  }
-
-  const dims = header.dims;
-  if (!dims || dims.length < 4) {
-    throw new Error('Invalid header dimensions');
-  }
-
-  const xDim = dims[1];
-  const yDim = dims[2];
-  const zDim = dims[3];
-
-  if (xDim <= 0 || yDim <= 0 || zDim <= 0) {
-    throw new Error('Invalid dimension values');
-  }
-
-  let sliceData: Uint8ClampedArray;
-  let sliceWidth: number;
-  let sliceHeight: number;
-
-  // Convert to appropriate typed array
-  let typedData: Float32Array;
-  switch (header.datatype || header.datatypeCode) {
-    case nifti.NIFTI1.TYPE_INT16:
-      typedData = new Float32Array(new Int16Array(image));
-      break;
-    case nifti.NIFTI1.TYPE_UINT16:
-      typedData = new Float32Array(new Uint16Array(image));
-      break;
-    case nifti.NIFTI1.TYPE_INT32:
-      typedData = new Float32Array(new Int32Array(image));
-      break;
-    case nifti.NIFTI1.TYPE_UINT32:
-      typedData = new Float32Array(new Uint32Array(image));
-      break;
-    case nifti.NIFTI1.TYPE_FLOAT32:
-      typedData = new Float32Array(image);
-      break;
-    case nifti.NIFTI1.TYPE_FLOAT64:
-      const float64Data = new Float64Array(image);
-      typedData = new Float32Array(float64Data);
-      break;
-    default:
-      typedData = new Float32Array(image);
-  }
-
-  // Apply scaling if present
-  const sclSlope = header.scl_slope || 1;
-  const sclInter = header.scl_inter || 0;
-
-  if (sclSlope !== 1 || sclInter !== 0) {
-    for (let i = 0; i < typedData.length; i++) {
-      typedData[i] = typedData[i] * sclSlope + sclInter;
-    }
-  }
-
-  const getVoxel = (x: number, y: number, z: number): number => {
-    if (x < 0 || x >= xDim || y < 0 || y >= yDim || z < 0 || z >= zDim) {
-      return 0;
-    }
-    const index = z * (xDim * yDim) + y * xDim + x;
-    return Math.round(typedData[index] || 0); // Round to get integer class values
-  };
-
-  const currentSlice = Math.round(slice);
-
-  try {
-    if (axis === 'axial') {
-      sliceWidth = xDim;
-      sliceHeight = yDim;
-      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
-
-      for (let j = 0; j < sliceHeight; j++) {
-        for (let i = 0; i < sliceWidth; i++) {
-          let avgValue = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
-          let samples = 0;
-
-          for (let k = -halfThickness; k <= halfThickness; k++) {
-            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), zDim - 1);
-            avgValue += getVoxel(i, j, sliceIndex);
-            samples++;
-          }
-
-          const classValue = Math.round(avgValue / samples);
-          const color = SEGMENTATION_COLORS[classValue as keyof typeof SEGMENTATION_COLORS] || [128, 128, 128];
-
-          const index = (j * sliceWidth + i) * 4;
-
-          if (classValue === 0) {
-            // Background - transparent black
-            sliceData[index] = 0;     // R
-            sliceData[index + 1] = 0; // G
-            sliceData[index + 2] = 0; // B
-            sliceData[index + 3] = 0; // A (transparent)
-          } else {
-            // Colored segmentation with opacity
-            sliceData[index] = color[0];     // R
-            sliceData[index + 1] = color[1]; // G
-            sliceData[index + 2] = color[2]; // B
-            sliceData[index + 3] = Math.round(255 * opacity); // A
-          }
-        }
-      }
-    } else if (axis === 'coronal') {
-      sliceWidth = xDim;
-      sliceHeight = zDim;
-      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
-
-      for (let j = 0; j < sliceHeight; j++) {
-        for (let i = 0; i < sliceWidth; i++) {
-          let avgValue = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
-          let samples = 0;
-
-          for (let k = -halfThickness; k <= halfThickness; k++) {
-            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), yDim - 1);
-            avgValue += getVoxel(i, sliceIndex, zDim - 1 - j);
-            samples++;
-          }
-
-          const classValue = Math.round(avgValue / samples);
-          const color = SEGMENTATION_COLORS[classValue as keyof typeof SEGMENTATION_COLORS] || [128, 128, 128];
-
-          const index = (j * sliceWidth + i) * 4;
-
-          if (classValue === 0) {
-            sliceData[index] = 0;
-            sliceData[index + 1] = 0;
-            sliceData[index + 2] = 0;
-            sliceData[index + 3] = 0;
-          } else {
-            sliceData[index] = color[0];
-            sliceData[index + 1] = color[1];
-            sliceData[index + 2] = color[2];
-            sliceData[index + 3] = Math.round(255 * opacity);
-          }
-        }
-      }
-    } else { // sagittal
-      sliceWidth = yDim;
-      sliceHeight = zDim;
-      sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
-
-      for (let j = 0; j < sliceHeight; j++) {
-        for (let i = 0; i < sliceWidth; i++) {
-          let avgValue = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
-          let samples = 0;
-
-          for (let k = -halfThickness; k <= halfThickness; k++) {
-            const sliceIndex = Math.min(Math.max(currentSlice + k, 0), xDim - 1);
-            avgValue += getVoxel(sliceIndex, i, zDim - 1 - j);
-            samples++;
-          }
-
-          const classValue = Math.round(avgValue / samples);
-          const color = SEGMENTATION_COLORS[classValue as keyof typeof SEGMENTATION_COLORS] || [128, 128, 128];
-
-          const index = (j * sliceWidth + i) * 4;
-
-          if (classValue === 0) {
-            sliceData[index] = 0;
-            sliceData[index + 1] = 0;
-            sliceData[index + 2] = 0;
-            sliceData[index + 3] = 0;
-          } else {
-            sliceData[index] = color[0];
-            sliceData[index + 1] = color[1];
-            sliceData[index + 2] = color[2];
-            sliceData[index + 3] = Math.round(255 * opacity);
-          }
-        }
-      }
-    }
-
-    canvas.width = sliceWidth;
-    canvas.height = sliceHeight;
-
-    context.filter = 'none';
-    context.imageSmoothingEnabled = false;
-
-    const imageData = new ImageData(sliceData, sliceWidth, sliceHeight);
-    context.putImageData(imageData, 0, 0);
-  } catch (error) {
-    console.error('Error in drawSliceWithSegmentation:', error);
-    throw new Error('Failed to draw segmentation slice');
   }
 };
 

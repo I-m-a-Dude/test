@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import { ViewerToolbar } from './viewer-toolbar';
 import { cn } from '@/utils/cn';
-import { getDataType, calculateAndSetChartData, drawSlice, drawSliceWithSegmentation, drawSliceWithOverlay, isSegmentationFile } from '@/utils/mriUtils';
+import { getDataType, calculateAndSetChartData, drawSlice, drawSliceWithOverlay, isSegmentationFile } from '@/utils/mriUtils';
 
 export function ResultsMriViewer() {
   const { currentFile, slice, zoom, axis, pan, setPan, setMaxSlices, zoomIn, zoomOut } = useResultsViewerStore();
@@ -105,9 +105,9 @@ export function ResultsMriViewer() {
             typedData = new Float32Array(image);
             break;
           case nifti.NIFTI1.TYPE_FLOAT64:
-            const float64Data = new Float64Array(image);
+            { const float64Data = new Float64Array(image);
             typedData = new Float32Array(float64Data);
-            break;
+            break; }
           default:
             typedData = new Float32Array(image);
         }
@@ -208,17 +208,6 @@ export function ResultsMriViewer() {
             windowWidth,
             sliceThickness,
             useWindowing,
-          });
-        } else if (isSegmentation) {
-          // Pentru segmentare pură: aplică culori de segmentare
-          drawSliceWithSegmentation({
-            canvas: canvasRef.current,
-            header: niftiHeader,
-            image: niftiImage,
-            slice,
-            axis,
-            sliceThickness,
-            opacity: 0.8,
           });
         } else {
           // Pentru date MRI normale
