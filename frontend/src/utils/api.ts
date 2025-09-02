@@ -335,18 +335,18 @@ SOLUȚII:
       savedFile: inferenceResult.saved_file
     });
 
-    console.log('📥 Se descarcă fișierul de segmentare...');
-    const segmentationFile = await downloadSegmentationResult(folderName);
+    console.log('📥 Se descarcă fișierul de overlay...');
+    const overlayFile = await downloadOverlayResult(folderName);
 
-    console.log('✅ Segmentare descărcată cu succes!');
+    console.log('✅ Overlay descărcat cu succes!');
 
     const analysis = generateAnalysisText(inferenceResult, prompt);
 
     return {
-      analysis,
-      segmentationFile,
-      inferenceResult
-    };
+    analysis,
+    segmentationFile: overlayFile, // sau redenumești în overlayFile
+    inferenceResult
+  };
 
   } catch (error) {
     console.error('❌ Eroare la analiza MRI:', error);
