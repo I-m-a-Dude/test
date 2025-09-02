@@ -73,9 +73,10 @@ export const calculateOptimalWindowing = (typedData: Float32Array): { windowCent
   return { windowCenter, windowWidth, min, max };
 };
 
-// Detect if file is a segmentation based on filename or data characteristics
+
 export const isSegmentationFile = (filename: string, typedData: Float32Array): boolean => {
-   if (filename.toLowerCase().includes('-overlay')) {
+  // FIXED: Overlay-urile NU sunt segmentări - au deja culorile aplicate
+  if (filename.toLowerCase().includes('-overlay') || filename.toLowerCase().includes('_overlay')) {
     return false; // Overlay-urile nu sunt segmentări pure
   }
 
@@ -558,7 +559,7 @@ export const drawSliceWithSegmentation = ({
   }
 };
 
-// Adaugă această funcție nouă DUPĂ drawSliceWithSegmentation:
+// În frontend/src/utils/mriUtils.ts - înlocuiește funcția drawSliceWithOverlay
 
 export const drawSliceWithOverlay = ({
   canvas,
@@ -587,23 +588,27 @@ export const drawSliceWithOverlay = ({
   const yDim = dims[2];
   const zDim = dims[3];
 
-  // Pentru overlay RGB, datele sunt organizate ca (H, W, D, 3) în loc de (H, W, D)
-  // Sau pot fi (H, W, D) dacă backend-ul salvează altfel
+  // FIXED: Verifică dacă este format RGB (4D cu ultimul dim = 3)
+  const isRGBFormat = dims.length >= 5 && dims[4] === 3;
+
+  console.log('[OVERLAY] Drawing overlay with format:', {
+    dims,
+    isRGBFormat,
+    imageSize: image.byteLength
+  });
 
   let typedData: Uint8Array;
 
-  // Overlay-ul de obicei e salvat ca RGB uint8
+  // FIXED: Pentru overlay RGB, datele sunt deja uint8
   typedData = new Uint8Array(image);
-
-  const isRGBData = dims.length > 4 && dims[4] === 3; // Verifică dacă e format RGB
 
   const getVoxelRGB = (x: number, y: number, z: number): [number, number, number] => {
     if (x < 0 || x >= xDim || y < 0 || y >= yDim || z < 0 || z >= zDim) {
       return [0, 0, 0];
     }
 
-    if (isRGBData) {
-      // Format: (H, W, D, 3)
+    if (isRGBFormat) {
+      // FIXED: Format corect pentru RGB overlay: (x, y, z, channel)
       const baseIndex = ((z * yDim + y) * xDim + x) * 3;
       return [
         typedData[baseIndex] || 0,     // R
@@ -611,10 +616,17 @@ export const drawSliceWithOverlay = ({
         typedData[baseIndex + 2] || 0  // B
       ];
     } else {
-      // Fallback: tratează ca grayscale și aplică culori manual
+      // FIXED: Fallback pentru overlay în format grayscale
+      // Backend-ul poate salva overlay-ul ca grayscale cu culori aplicate deja
       const index = z * (xDim * yDim) + y * xDim + x;
       const value = typedData[index] || 0;
-      return [value, value, value];
+
+      // Interpretează valorile ca clase de segmentare și aplică culori
+      if (value === 0) return [0, 0, 0];        // Background
+      if (value <= 50) return [100, 180, 255];  // NETC - blue
+      if (value <= 100) return [255, 255, 150]; // SNFH - yellow
+      if (value <= 150) return [255, 100, 100]; // ET - red
+      return [200, 100, 200];                   // RC - purple
     }
   };
 
@@ -648,7 +660,7 @@ export const drawSliceWithOverlay = ({
           const finalG = avgG / samples;
           const finalB = avgB / samples;
 
-          // Aplică brightness/contrast pe fiecare canal
+          // FIXED: Pentru overlay, aplicăm brightness/contrast pe fiecare canal RGB
           let adjustedR, adjustedG, adjustedB;
 
           if (useWindowing) {
@@ -669,7 +681,6 @@ export const drawSliceWithOverlay = ({
         }
       }
     } else if (axis === 'coronal') {
-      // Similar logic for coronal...
       sliceWidth = xDim;
       sliceHeight = zDim;
       sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
@@ -709,7 +720,7 @@ export const drawSliceWithOverlay = ({
           sliceData[index + 3] = 255;
         }
       }
-    } else { // sagittal - similar logic
+    } else { // sagittal
       sliceWidth = yDim;
       sliceHeight = zDim;
       sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
@@ -751,6 +762,7 @@ export const drawSliceWithOverlay = ({
       }
     }
 
+    // FIXED: Setează dimensiunile corecte pentru canvas
     canvas.width = sliceWidth;
     canvas.height = sliceHeight;
 
@@ -759,12 +771,19 @@ export const drawSliceWithOverlay = ({
 
     const imageData = new ImageData(sliceData, sliceWidth, sliceHeight);
     context.putImageData(imageData, 0, 0);
+
+    console.log('[OVERLAY] Successfully rendered slice:', {
+      sliceWidth,
+      sliceHeight,
+      currentSlice,
+      axis
+    });
+
   } catch (error) {
     console.error('Error in drawSliceWithOverlay:', error);
     throw new Error('Failed to draw overlay slice');
   }
 };
-
 export const calculateAndSetChartData = (
   header: nifti.NIFTI1 | nifti.NIFTI2,
   image: ArrayBuffer,

@@ -1,3 +1,4 @@
+// frontend/src/pages/result-page.tsx
 import { ResultsMriViewer } from '@/components/results-mri-viewer';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { MetadataViewerDialog } from '@/components/metadata-viewer-dialog';
 import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, FileText, Download, Eye, BarChart3, Clock, Target, Palette } from 'lucide-react';
+import { BrainCircuit, FileText, Download, BarChart3, Clock, Target, Palette } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -17,7 +18,7 @@ import { useToast } from '@/utils/hooks/use-toast';
 
 export default function ResultPage() {
   useCineMode();
-  const { analysisResult, segmentationFile, inferenceResult, originalFile, isViewingSegmentation, switchToOriginal, switchToSegmentation } = useResultStore();
+  const { analysisResult, overlayFile, inferenceResult, originalFile } = useResultStore();
   const { setCurrentFile } = useResultsViewerStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -29,42 +30,29 @@ export default function ResultPage() {
       return;
     }
 
-    // Set the appropriate file in the results viewer
-    const fileToShow = isViewingSegmentation && segmentationFile ? segmentationFile : originalFile;
-
-    if (fileToShow) {
-      setCurrentFile(fileToShow);
-    }
-
-    // Show appropriate toast
-    if (isViewingSegmentation && segmentationFile) {
+    // Always load overlay file in results (dacă există)
+    if (overlayFile) {
+      setCurrentFile(overlayFile);
       toast({
-        title: 'Segmentation loaded',
-        description: 'Now displaying AI segmentation result.',
+        title: 'AI Analysis Results Loaded',
+        description: 'Displaying T1N + AI segmentation overlay.',
+        duration: 3000,
+      });
+    } else if (originalFile) {
+      // Fallback la original dacă nu există overlay
+      setCurrentFile(originalFile);
+      toast({
+        title: 'Analysis Results Loaded',
+        description: 'Overlay not available, showing original file.',
+        variant: 'destructive',
       });
     }
-  }, [analysisResult, navigate, segmentationFile, originalFile, isViewingSegmentation, setCurrentFile, toast]);
+  }, [analysisResult, navigate, overlayFile, originalFile, setCurrentFile, toast]);
 
   // Render a loading state or null while redirecting to avoid flashing content
   if (!analysisResult) {
     return null;
   }
-
-  const handleToggleView = () => {
-    if (isViewingSegmentation) {
-      switchToOriginal();
-      toast({
-        title: 'Original file loaded',
-        description: 'Now displaying original MRI file.',
-      });
-    } else {
-      switchToSegmentation();
-      toast({
-        title: 'Segmentation loaded',
-        description: 'Now displaying AI segmentation result.',
-      });
-    }
-  };
 
   const formatTime = (seconds: number) => {
     return `${seconds.toFixed(2)}s`;
@@ -99,16 +87,6 @@ export default function ResultPage() {
       <header className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
         <Logo />
         <div className="flex items-center gap-4">
-          {segmentationFile && (
-            <Button
-              variant="outline"
-              onClick={handleToggleView}
-              className="rounded-full"
-            >
-              <Eye className="h-4 w-4 mr-2" />
-              {isViewingSegmentation ? 'View Original' : 'View Segmentation'}
-            </Button>
-          )}
           <Button variant="outline" asChild className="rounded-full">
             <Link to={pages.analysis}>
               Back to Analysis
@@ -122,17 +100,14 @@ export default function ResultPage() {
           <div className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
             <ResultsMriViewer />
 
-            {/* Indicator for view type */}
-            {segmentationFile && (
+            {/* Fixed indicator - show overlay status */}
+            {overlayFile && (
               <div className="absolute top-4 left-4 z-10">
                 <Badge
                   variant="outline"
-                  className={`${isViewingSegmentation 
-                    ? 'bg-green-100 text-green-800 border-green-200' 
-                    : 'bg-blue-100 text-blue-800 border-blue-200'
-                  } backdrop-blur-sm`}
+                  className="bg-green-100 text-green-800 border-green-200 backdrop-blur-sm"
                 >
-                  {isViewingSegmentation ? '🎯 AI Segmentation' : '📊 Original MRI'}
+                  🎯 AI Overlay (T1N + Segmentation)
                 </Badge>
               </div>
             )}
@@ -241,31 +216,34 @@ export default function ResultPage() {
                 </>
               )}
 
-              {/* Segmentation Color Legend */}
-              {segmentationFile && isViewingSegmentation && (
+              {/* AI Overlay Color Legend - afișat mereu când există overlay */}
+              {overlayFile && (
                 <>
                   <Separator />
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Palette className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold text-sm">Color Legend</h3>
+                      <h3 className="font-semibold text-sm">AI Overlay Legend</h3>
                     </div>
 
                     <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground mb-2">
+                        T1N background + colored segmentation overlay
+                      </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(0, 100, 255)' }}></div>
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(100, 180, 255)' }}></div>
                         <span className="text-xs">NETC - Non-Enhancing Tumor Core</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 255, 0)' }}></div>
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 255, 150)' }}></div>
                         <span className="text-xs">SNFH - Surrounding FLAIR Hyperintensity</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 0, 0)' }}></div>
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 100, 100)' }}></div>
                         <span className="text-xs">ET - Enhancing Tumor</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(128, 0, 128)' }}></div>
+                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(200, 100, 200)' }}></div>
                         <span className="text-xs">RC - Resection Cavity</span>
                       </div>
                     </div>
@@ -301,7 +279,7 @@ export default function ResultPage() {
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2" disabled>
                   <Download className="h-4 w-4" />
-                  Download Segmentation
+                  Download AI Overlay
                 </Button>
               </div>
             </CardContent>
