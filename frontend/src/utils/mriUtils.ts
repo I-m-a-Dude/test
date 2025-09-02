@@ -351,6 +351,10 @@ export const drawSlice = ({
 
 // Înlocuiește funcția drawSliceWithOverlay în frontend/src/utils/mriUtils.ts
 
+// Înlocuiește funcția drawSliceWithOverlay din frontend/src/utils/mriUtils.ts
+
+// Înlocuiește funcția drawSliceWithOverlay din frontend/src/utils/mriUtils.ts
+
 export const drawSliceWithOverlay = ({
   canvas,
   header,
@@ -378,57 +382,90 @@ export const drawSliceWithOverlay = ({
   const yDim = dims[2];
   const zDim = dims[3];
 
-  // DEBUG: Log informații despre dimensiuni
-  console.log('[OVERLAY DEBUG] Dimensions:', {
+  console.log('[OVERLAY DEBUG] Header info:', {
     dims: dims,
-    xDim, yDim, zDim,
+    datatype: header.datatype || header.datatypeCode,
     imageByteLength: image.byteLength,
-    expectedSize: xDim * yDim * zDim * 3, // Pentru RGB
-    slice, axis
+    expectedVoxels: xDim * yDim * zDim
   });
 
-  // FIXED: Verifică mai atent formatul RGB
-  const isRGBFormat = dims.length >= 5 && dims[4] === 3;
-  const hasRGBData = image.byteLength === (xDim * yDim * zDim * 3);
+  // FIXED: Detectare mai robustă a formatului overlay RGB
+  const bytesPerVoxel = image.byteLength / (xDim * yDim * zDim);
+  const isRGBOverlay = bytesPerVoxel === 3 || (dims.length >= 5 && dims[4] === 3);
 
   console.log('[OVERLAY DEBUG] Format detection:', {
-    isRGBFormat,
-    hasRGBData,
-    bytesPerVoxel: image.byteLength / (xDim * yDim * zDim)
+    bytesPerVoxel,
+    isRGBOverlay,
+    totalVoxels: xDim * yDim * zDim
   });
 
   let typedData: Uint8Array;
-  typedData = new Uint8Array(image);
 
+  // Pentru overlay RGB, datele sunt deja în format uint8 RGB
+  if (isRGBOverlay) {
+    typedData = new Uint8Array(image);
+  } else {
+    // Pentru alte formate, convertim la uint8
+    switch (header.datatype || header.datatypeCode) {
+      case nifti.NIFTI1.TYPE_INT16:
+        const int16Data = new Int16Array(image);
+        typedData = new Uint8Array(int16Data.length);
+        for (let i = 0; i < int16Data.length; i++) {
+          typedData[i] = Math.max(0, Math.min(255, int16Data[i]));
+        }
+        break;
+      case nifti.NIFTI1.TYPE_UINT16:
+        const uint16Data = new Uint16Array(image);
+        typedData = new Uint8Array(uint16Data.length);
+        for (let i = 0; i < uint16Data.length; i++) {
+          typedData[i] = Math.max(0, Math.min(255, uint16Data[i] / 256));
+        }
+        break;
+      case nifti.NIFTI1.TYPE_FLOAT32:
+        const float32Data = new Float32Array(image);
+        typedData = new Uint8Array(float32Data.length);
+        for (let i = 0; i < float32Data.length; i++) {
+          typedData[i] = Math.max(0, Math.min(255, float32Data[i] * 255));
+        }
+        break;
+      default:
+        typedData = new Uint8Array(image);
+    }
+  }
+
+  // FIXED: Funcție robustă pentru citirea voxel-ilor RGB
   const getVoxelRGB = (x: number, y: number, z: number): [number, number, number] => {
     if (x < 0 || x >= xDim || y < 0 || y >= yDim || z < 0 || z >= zDim) {
       return [0, 0, 0];
     }
 
-    if (hasRGBData) {
-      // FIXED: Format RGB corect - (x, y, z, channel)
-      const baseIndex = ((z * yDim + y) * xDim + x) * 3;
-      return [
-        typedData[baseIndex] || 0,     // R
-        typedData[baseIndex + 1] || 0, // G
-        typedData[baseIndex + 2] || 0  // B
-      ];
+    if (isRGBOverlay) {
+      // FIXED: Indexare corectă pentru overlay RGB (z, y, x, channel)
+      // Backend salvează ca (H, W, D, 3) deci ordinea este: depth -> height -> width -> channel
+      const baseIndex = ((z * yDim + y) * xDim + x);
+
+      if (baseIndex + 2 < typedData.length) {
+        return [
+          typedData[baseIndex] || 0,     // R
+          typedData[baseIndex + 1] || 0, // G
+          typedData[baseIndex + 2] || 0  // B
+        ];
+      } else {
+        console.warn('[OVERLAY] Index out of bounds:', { baseIndex, dataLength: typedData.length });
+        return [0, 0, 0];
+      }
     } else {
-      // FIXED: Fallback pentru grayscale
+      // Pentru date non-RGB (grayscale), folosim valoarea ca intensitate
       const index = z * (xDim * yDim) + y * xDim + x;
       const value = typedData[index] || 0;
-
-      // Interpretează ca culori de overlay direct
-      return [value, value, value]; // Grayscale
+      return [value, value, value]; // Grayscale în RGB
     }
   };
 
-  let sliceData: Uint8ClampedArray;
+  // FIXED: Calculează dimensiunile slice-ului corect
   let sliceWidth: number;
   let sliceHeight: number;
-  const currentSlice = Math.round(slice);
 
-  // FIXED: Calculează dimensiunile corecte pentru fiecare axă
   if (axis === 'axial') {
     sliceWidth = xDim;
     sliceHeight = yDim;
@@ -440,27 +477,29 @@ export const drawSliceWithOverlay = ({
     sliceHeight = zDim;
   }
 
-  // DEBUG: Log dimensiuni slice
-  console.log('[OVERLAY DEBUG] Slice dimensions:', {
-    axis, sliceWidth, sliceHeight, currentSlice
+  console.log('[OVERLAY DEBUG] Slice info:', {
+    axis, sliceWidth, sliceHeight,
+    currentSlice: Math.round(slice),
+    sliceThickness
   });
 
-  sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
+  const sliceData = new Uint8ClampedArray(sliceWidth * sliceHeight * 4);
+  const currentSlice = Math.round(slice);
 
   try {
+    // FIXED: Procesare optimizată pentru fiecare axă
     if (axis === 'axial') {
       for (let j = 0; j < sliceHeight; j++) {
         for (let i = 0; i < sliceWidth; i++) {
           let avgR = 0, avgG = 0, avgB = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
           let samples = 0;
 
+          // Averaging pentru slice thickness
+          const halfThickness = Math.floor(sliceThickness / 2);
           for (let k = -halfThickness; k <= halfThickness; k++) {
             const sliceIndex = Math.min(Math.max(currentSlice + k, 0), zDim - 1);
             const [r, g, b] = getVoxelRGB(i, j, sliceIndex);
-            avgR += r;
-            avgG += g;
-            avgB += b;
+            avgR += r; avgG += g; avgB += b;
             samples++;
           }
 
@@ -468,20 +507,23 @@ export const drawSliceWithOverlay = ({
           const finalG = avgG / samples;
           const finalB = avgB / samples;
 
-          // FIXED: Pentru overlay RGB, aplică ajustări mai simple
+          // FIXED: Aplicare ajustări pentru overlay RGB
           let adjustedR, adjustedG, adjustedB;
 
-          // Pentru overlay RGB, valorile sunt deja în range 0-255, aplică doar brightness/contrast simplu
-          if (hasRGBData) {
-            // Ajustări simple pentru RGB overlay
+          if (isRGBOverlay) {
+            // Pentru overlay RGB, aplică ajustări simple de brightness/contrast
             const brightnessFactor = brightness / 100;
             const contrastFactor = contrast / 100;
+            const midpoint = 127.5;
 
-            adjustedR = Math.max(0, Math.min(255, (finalR * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedG = Math.max(0, Math.min(255, (finalG * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedB = Math.max(0, Math.min(255, (finalB * brightnessFactor - 127.5) * contrastFactor + 127.5));
+            adjustedR = Math.max(0, Math.min(255,
+              midpoint + (finalR * brightnessFactor - midpoint) * contrastFactor));
+            adjustedG = Math.max(0, Math.min(255,
+              midpoint + (finalG * brightnessFactor - midpoint) * contrastFactor));
+            adjustedB = Math.max(0, Math.min(255,
+              midpoint + (finalB * brightnessFactor - midpoint) * contrastFactor));
           } else {
-            // Pentru date normale, folosește windowing/brightness obișnuit
+            // Pentru date normale, folosește windowing sau brightness/contrast
             if (useWindowing) {
               adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
               adjustedG = applyWindowing(finalG, windowCenter, windowWidth);
@@ -494,22 +536,22 @@ export const drawSliceWithOverlay = ({
           }
 
           const index = (j * sliceWidth + i) * 4;
-          sliceData[index] = adjustedR;     // R
-          sliceData[index + 1] = adjustedG; // G
-          sliceData[index + 2] = adjustedB; // B
-          sliceData[index + 3] = 255;      // A
+          sliceData[index] = Math.round(adjustedR);     // R
+          sliceData[index + 1] = Math.round(adjustedG); // G
+          sliceData[index + 2] = Math.round(adjustedB); // B
+          sliceData[index + 3] = 255;                   // A (opaque)
         }
       }
     } else if (axis === 'coronal') {
       for (let j = 0; j < sliceHeight; j++) {
         for (let i = 0; i < sliceWidth; i++) {
           let avgR = 0, avgG = 0, avgB = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
           let samples = 0;
 
+          const halfThickness = Math.floor(sliceThickness / 2);
           for (let k = -halfThickness; k <= halfThickness; k++) {
             const sliceIndex = Math.min(Math.max(currentSlice + k, 0), yDim - 1);
-            const [r, g, b] = getVoxelRGB(i, sliceIndex, zDim - 1 - j);
+            const [r, g, b] = getVoxelRGB(i, sliceIndex, zDim - 1 - j); // Flip Z
             avgR += r; avgG += g; avgB += b;
             samples++;
           }
@@ -520,14 +562,17 @@ export const drawSliceWithOverlay = ({
 
           let adjustedR, adjustedG, adjustedB;
 
-          if (hasRGBData) {
-            // Ajustări simple pentru RGB overlay
+          if (isRGBOverlay) {
             const brightnessFactor = brightness / 100;
             const contrastFactor = contrast / 100;
+            const midpoint = 127.5;
 
-            adjustedR = Math.max(0, Math.min(255, (finalR * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedG = Math.max(0, Math.min(255, (finalG * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedB = Math.max(0, Math.min(255, (finalB * brightnessFactor - 127.5) * contrastFactor + 127.5));
+            adjustedR = Math.max(0, Math.min(255,
+              midpoint + (finalR * brightnessFactor - midpoint) * contrastFactor));
+            adjustedG = Math.max(0, Math.min(255,
+              midpoint + (finalG * brightnessFactor - midpoint) * contrastFactor));
+            adjustedB = Math.max(0, Math.min(255,
+              midpoint + (finalB * brightnessFactor - midpoint) * contrastFactor));
           } else {
             if (useWindowing) {
               adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
@@ -541,9 +586,9 @@ export const drawSliceWithOverlay = ({
           }
 
           const index = (j * sliceWidth + i) * 4;
-          sliceData[index] = adjustedR;
-          sliceData[index + 1] = adjustedG;
-          sliceData[index + 2] = adjustedB;
+          sliceData[index] = Math.round(adjustedR);
+          sliceData[index + 1] = Math.round(adjustedG);
+          sliceData[index + 2] = Math.round(adjustedB);
           sliceData[index + 3] = 255;
         }
       }
@@ -551,12 +596,12 @@ export const drawSliceWithOverlay = ({
       for (let j = 0; j < sliceHeight; j++) {
         for (let i = 0; i < sliceWidth; i++) {
           let avgR = 0, avgG = 0, avgB = 0;
-          const halfThickness = Math.floor(sliceThickness / 2);
           let samples = 0;
 
+          const halfThickness = Math.floor(sliceThickness / 2);
           for (let k = -halfThickness; k <= halfThickness; k++) {
             const sliceIndex = Math.min(Math.max(currentSlice + k, 0), xDim - 1);
-            const [r, g, b] = getVoxelRGB(sliceIndex, i, zDim - 1 - j);
+            const [r, g, b] = getVoxelRGB(sliceIndex, i, zDim - 1 - j); // Flip Z
             avgR += r; avgG += g; avgB += b;
             samples++;
           }
@@ -567,14 +612,17 @@ export const drawSliceWithOverlay = ({
 
           let adjustedR, adjustedG, adjustedB;
 
-          if (hasRGBData) {
-            // Ajustări simple pentru RGB overlay
+          if (isRGBOverlay) {
             const brightnessFactor = brightness / 100;
             const contrastFactor = contrast / 100;
+            const midpoint = 127.5;
 
-            adjustedR = Math.max(0, Math.min(255, (finalR * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedG = Math.max(0, Math.min(255, (finalG * brightnessFactor - 127.5) * contrastFactor + 127.5));
-            adjustedB = Math.max(0, Math.min(255, (finalB * brightnessFactor - 127.5) * contrastFactor + 127.5));
+            adjustedR = Math.max(0, Math.min(255,
+              midpoint + (finalR * brightnessFactor - midpoint) * contrastFactor));
+            adjustedG = Math.max(0, Math.min(255,
+              midpoint + (finalG * brightnessFactor - midpoint) * contrastFactor));
+            adjustedB = Math.max(0, Math.min(255,
+              midpoint + (finalB * brightnessFactor - midpoint) * contrastFactor));
           } else {
             if (useWindowing) {
               adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
@@ -588,37 +636,38 @@ export const drawSliceWithOverlay = ({
           }
 
           const index = (j * sliceWidth + i) * 4;
-          sliceData[index] = adjustedR;
-          sliceData[index + 1] = adjustedG;
-          sliceData[index + 2] = adjustedB;
+          sliceData[index] = Math.round(adjustedR);
+          sliceData[index + 1] = Math.round(adjustedG);
+          sliceData[index + 2] = Math.round(adjustedB);
           sliceData[index + 3] = 255;
         }
       }
     }
 
-    // CRITICAL FIX: Setează dimensiunile EXACT CORECTE pentru canvas
-    console.log('[OVERLAY DEBUG] Setting canvas size:', { sliceWidth, sliceHeight });
+    // FIXED: Setează canvas cu dimensiunile corecte
     canvas.width = sliceWidth;
     canvas.height = sliceHeight;
 
-    // FIXED: Dezactivează complet orice filtru sau smooth
+    // Dezactivează complet antialiasing-ul pentru afișare pixel-perfect
     context.filter = 'none';
     context.imageSmoothingEnabled = false;
 
-    // FIXED: Curăță canvas-ul complet înainte
+    // Curăță canvas-ul complet
     context.clearRect(0, 0, sliceWidth, sliceHeight);
 
+    // Desenează imaginea
     const imageData = new ImageData(sliceData, sliceWidth, sliceHeight);
     context.putImageData(imageData, 0, 0);
 
-    console.log('[OVERLAY DEBUG] Successfully rendered overlay slice');
+    console.log('[OVERLAY DEBUG] Successfully rendered overlay slice:', {
+      axis, slice: currentSlice, isRGBOverlay
+    });
 
   } catch (error) {
-    console.error('[OVERLAY ERROR]', error);
-    throw new Error('Failed to draw overlay slice: ' + error.message);
+    console.error('[OVERLAY ERROR] Failed to render slice:', error);
+    throw new Error(`Failed to draw overlay slice: ${error.message}`);
   }
 };
-
 
 
 
