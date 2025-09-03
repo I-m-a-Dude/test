@@ -14,16 +14,10 @@ type DrawSliceParams = {
   windowWidth?: number;
   sliceThickness: number;
   useWindowing?: boolean;
+  filename?: string; // Add this line
+
 };
 
-// // Color mapping for segmentation classes
-// const SEGMENTATION_COLORS = {
-//   0: [0, 0, 0],       // Background - black
-//   1: [0, 100, 255],   // NETC - blue
-//   2: [255, 255, 0],   // SNFH - yellow
-//   3: [255, 0, 0],     // ET - red
-//   4: [128, 0, 128],   // RC - purple
-// };
 
 export const getDataType = (code: number): string => {
   switch (code) {
@@ -360,46 +354,10 @@ const applyHotColormap = (intensity: number, minVal: number, maxVal: number): [n
   return [r, g, b];
 };
 
-/**
- * Detectează robust tipul de overlay
- */
-const detectOverlayType = (
-  header: nifti.NIFTI1 | nifti.NIFTI2,
-  image: ArrayBuffer,
-  filename: string
-): { isRGB: boolean; isGrayscale: boolean; bytesPerVoxel: number } => {
-  const dims = header.dims;
-  const xDim = dims[1];
-  const yDim = dims[2];
-  const zDim = dims[3];
 
-  const totalVoxels = xDim * yDim * zDim;
-  const bytesPerVoxel = image.byteLength / totalVoxels;
 
-  // Detectare prin filename
-  const lowerFilename = filename.toLowerCase();
-  const hasOverlayKeyword = lowerFilename.includes('-overlay') || lowerFilename.includes('_overlay');
-
-  // Detectare prin dimensiuni
-  const hasRGBDimension = dims.length >= 5 && dims[4] === 3;
-  const hasRGBBytes = Math.abs(bytesPerVoxel - 3) < 0.1; // ~3 bytes per voxel pentru RGB
-
-  // Logica de decizie
-  const isRGB = hasOverlayKeyword && (hasRGBDimension || hasRGBBytes);
-  const isGrayscale = hasOverlayKeyword && !isRGB;
-
-  console.log('[OVERLAY DETECT]', {
-    filename: lowerFilename,
-    bytesPerVoxel,
-    hasOverlayKeyword,
-    hasRGBDimension,
-    hasRGBBytes,
-    isRGB,
-    isGrayscale
-  });
-
-  return { isRGB, isGrayscale, bytesPerVoxel };
-};
+// În frontend/src/utils/mriUtils.ts
+// Înlocuiește funcția drawSliceWithOverlay existentă
 
 export const drawSliceWithOverlay = ({
   canvas,
@@ -413,7 +371,7 @@ export const drawSliceWithOverlay = ({
   windowWidth = 1,
   sliceThickness = 1,
   useWindowing = false,
-  filename, // ADDED: Pentru detectarea corectă
+  filename = 'overlay', // NEW: Default filename
 }: DrawSliceParams): void => {
   const context = canvas.getContext('2d');
   if (!context) {
@@ -429,37 +387,45 @@ export const drawSliceWithOverlay = ({
   const yDim = dims[2];
   const zDim = dims[3];
 
-  // FIXED: Folosește filename-ul transmis explicit
-  const actualFilename = filename || canvas.title || 'overlay';
-  console.log('[OVERLAY] Using filename for detection:', actualFilename);
+  console.log('[OVERLAY] Using filename for detection:', filename);
 
-  // Detectare inteligentă a tipului de overlay
-  const overlayType = detectOverlayType(header, image, actualFilename);
+  // ENHANCED DETECTION - same as in the improved function
+  const totalVoxels = xDim * yDim * zDim;
+  const bytesPerVoxel = image.byteLength / totalVoxels;
 
-  // ADDED: Verificare rapidă a datelor pentru confirmare RGB
-  if (overlayType.isRGB) {
-    const testData = new Uint8Array(image.slice(0, Math.min(100, image.byteLength)));
-    console.log('[OVERLAY RGB TEST] Primii bytes:', Array.from(testData.slice(0, 15)));
+  // Enhanced detection: use bytesPerVoxel as primary indicator
+  const lowerFilename = filename.toLowerCase();
+  const hasOverlayKeyword = lowerFilename.includes('-overlay') ||
+                           lowerFilename.includes('_overlay') ||
+                           lowerFilename.includes('overlay');
 
-    // Verifică dacă datele par să aibă pattern RGB (valori diverse pe grupuri de 3)
-    const hasVariation = testData.some(val => val > 10); // Cel puțin unele valori > 10
-    console.log('[OVERLAY RGB TEST] Are variație în culori:', hasVariation);
-  }
+  const hasRGBBytes = Math.abs(bytesPerVoxel - 3) < 0.2; // 3 bytes per voxel
+  const hasRGBDimension = dims.length >= 5 && dims[4] === 3;
 
-  console.log('[OVERLAY] Processing overlay:', {
-    type: overlayType.isRGB ? 'RGB' : overlayType.isGrayscale ? 'Grayscale' : 'Standard',
-    dimensions: [xDim, yDim, zDim],
-    bytesPerVoxel: overlayType.bytesPerVoxel
+  // IMPROVED LOGIC: If it looks like RGB (3 bytes/voxel), treat as RGB
+  const isRGB = hasRGBBytes || (hasOverlayKeyword && hasRGBDimension);
+  const isGrayscale = hasOverlayKeyword && !isRGB;
+
+  console.log('[OVERLAY ENHANCED DETECT]', {
+    filename: lowerFilename,
+    bytesPerVoxel: bytesPerVoxel.toFixed(2),
+    hasOverlayKeyword,
+    hasRGBBytes,
+    hasRGBDimension,
+    isRGB,
+    isGrayscale,
+    decision: isRGB ? 'RGB' : isGrayscale ? 'Grayscale' : 'Standard'
   });
 
-  // Convertire date bazată pe tip
+  // Convert data based on detection
   let typedData: Uint8Array | Float32Array;
 
-  if (overlayType.isRGB) {
-    // Pentru RGB overlay, datele sunt deja uint8
+  if (isRGB) {
+    // For RGB overlay, data is already uint8
     typedData = new Uint8Array(image);
+    console.log('[OVERLAY] Processing as RGB data');
   } else {
-    // Pentru grayscale overlay sau date standard, convertim la Float32
+    // For grayscale overlay or standard data, convert to Float32
     switch (header.datatype || header.datatypeCode) {
       case nifti.NIFTI1.TYPE_INT16:
         typedData = new Float32Array(new Int16Array(image));
@@ -473,12 +439,12 @@ export const drawSliceWithOverlay = ({
       default:
         typedData = new Float32Array(new Uint8Array(image));
     }
+    console.log('[OVERLAY] Processing as grayscale/standard data');
   }
 
-  // Pentru grayscale overlay, calculăm min/max pentru colormap
+  // For grayscale overlay, calculate min/max for colormap
   let dataMin = 0, dataMax = 255;
-  if (overlayType.isGrayscale && typedData instanceof Float32Array) {
-    // Găsește min/max din datele non-zero pentru colormap optim
+  if (isGrayscale && typedData instanceof Float32Array) {
     const nonZeroValues = Array.from(typedData).filter(val => val > 0);
     if (nonZeroValues.length > 0) {
       dataMin = Math.min(...nonZeroValues);
@@ -487,15 +453,15 @@ export const drawSliceWithOverlay = ({
     console.log('[OVERLAY] Grayscale range for colormap:', { dataMin, dataMax });
   }
 
-  // Funcție pentru citirea voxel-ilor
+  // Function to read voxel values
   const getVoxelValue = (x: number, y: number, z: number): [number, number, number] => {
     if (x < 0 || x >= xDim || y < 0 || y >= yDim || z < 0 || z >= zDim) {
       return [0, 0, 0];
     }
 
-    if (overlayType.isRGB) {
-      // RGB overlay: citește 3 bytes consecutivi
-      const baseIndex = ((z * yDim + y) * xDim + x) * 3;
+    if (isRGB) {
+      // RGB overlay: read 3 consecutive bytes
+      const baseIndex = ((z * yDim + y) * xDim + x);
       const typedDataUint8 = typedData as Uint8Array;
 
       if (baseIndex + 2 < typedDataUint8.length) {
@@ -507,23 +473,23 @@ export const drawSliceWithOverlay = ({
       }
       return [0, 0, 0];
     } else {
-      // Grayscale overlay sau date standard
+      // Grayscale overlay or standard data
       const index = z * (xDim * yDim) + y * xDim + x;
       const typedDataFloat = typedData as Float32Array;
       const intensity = typedDataFloat[index] || 0;
 
-      if (overlayType.isGrayscale && intensity > 0) {
-        // Aplică hot colormap pentru grayscale overlay
+      if (isGrayscale && intensity > 0) {
+        // Apply hot colormap for grayscale overlay
         return applyHotColormap(intensity, dataMin, dataMax);
       } else {
-        // Date standard - grayscale normal
+        // Standard data - normal grayscale
         const grayValue = Math.max(0, Math.min(255, intensity));
         return [grayValue, grayValue, grayValue];
       }
     }
   };
 
-  // Calculează dimensiunile slice-ului
+  // Calculate slice dimensions
   let sliceWidth: number, sliceHeight: number;
 
   if (axis === 'axial') {
@@ -541,17 +507,18 @@ export const drawSliceWithOverlay = ({
   const currentSlice = Math.round(slice);
 
   console.log('[OVERLAY] Rendering slice:', {
-    axis, currentSlice, sliceWidth, sliceHeight, sliceThickness
+    axis, currentSlice, sliceWidth, sliceHeight, sliceThickness,
+    detectedType: isRGB ? 'RGB' : isGrayscale ? 'Grayscale' : 'Standard'
   });
 
   try {
-    // Procesare optimizată pentru fiecare axă
+    // Optimized processing for each axis
     for (let j = 0; j < sliceHeight; j++) {
       for (let i = 0; i < sliceWidth; i++) {
         let avgR = 0, avgG = 0, avgB = 0;
         let samples = 0;
 
-        // Averaging pentru slice thickness
+        // Averaging for slice thickness
         const halfThickness = Math.floor(sliceThickness / 2);
 
         for (let k = -halfThickness; k <= halfThickness; k++) {
@@ -578,11 +545,11 @@ export const drawSliceWithOverlay = ({
         const finalG = avgG / samples;
         const finalB = avgB / samples;
 
-        // Aplică ajustări de brightness/contrast
+        // Apply brightness/contrast adjustments
         let adjustedR: number, adjustedG: number, adjustedB: number;
 
-        if (overlayType.isRGB || overlayType.isGrayscale) {
-          // Pentru overlay-uri, aplică ajustări simple
+        if (isRGB || isGrayscale) {
+          // For overlays, apply simple adjustments
           const brightnessFactor = brightness / 100;
           const contrastFactor = contrast / 100;
           const midpoint = 127.5;
@@ -594,7 +561,7 @@ export const drawSliceWithOverlay = ({
           adjustedB = Math.max(0, Math.min(255,
             midpoint + (finalB * brightnessFactor - midpoint) * contrastFactor));
         } else {
-          // Pentru date standard, folosește windowing sau brightness/contrast
+          // For standard data, use windowing or brightness/contrast
           if (useWindowing) {
             adjustedR = applyWindowing(finalR, windowCenter, windowWidth);
             adjustedG = applyWindowing(finalG, windowCenter, windowWidth);
@@ -614,7 +581,7 @@ export const drawSliceWithOverlay = ({
       }
     }
 
-    // Setează canvas și desenează
+    // Set canvas and draw
     canvas.width = sliceWidth;
     canvas.height = sliceHeight;
 
@@ -625,14 +592,14 @@ export const drawSliceWithOverlay = ({
     const imageData = new ImageData(sliceData, sliceWidth, sliceHeight);
     context.putImageData(imageData, 0, 0);
 
-    console.log('[OVERLAY] Successfully rendered overlay with', overlayType.isRGB ? 'RGB colors' : overlayType.isGrayscale ? 'hot colormap' : 'standard grayscale');
+    console.log('[OVERLAY] Successfully rendered overlay with',
+      isRGB ? 'RGB colors' : isGrayscale ? 'hot colormap' : 'standard grayscale');
 
   } catch (error) {
     console.error('[OVERLAY ERROR] Failed to render overlay:', error);
     throw new Error(`Failed to draw overlay slice: ${error.message}`);
   }
 };
-
 
 
 export const calculateAndSetChartData = (
