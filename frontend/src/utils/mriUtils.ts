@@ -74,41 +74,6 @@ export const calculateOptimalWindowing = (typedData: Float32Array): { windowCent
 };
 
 
-export const isSegmentationFile = (filename: string, typedData: Float32Array): boolean => {
-  // FIXED: Overlay-urile NU sunt segmentări - au deja culorile aplicate
-  if (filename.toLowerCase().includes('-overlay') || filename.toLowerCase().includes('_overlay')) {
-    return false; // Overlay-urile nu sunt segmentări pure
-  }
-
-  const filenameIndicators = [
-    'seg', 'segmentation', '_seg', '-seg',
-    'mask', '_mask', '-mask'
-  ];
-
-  const lowerFilename = filename.toLowerCase();
-  const hasSegKeyword = filenameIndicators.some(indicator =>
-    lowerFilename.includes(indicator)
-  );
-
-  if (hasSegKeyword) return true;
-
-  // Check data characteristics - segmentation usually has small integer values
-  const uniqueValues = new Set();
-  const sampleSize = Math.min(1000, typedData.length);
-
-  for (let i = 0; i < sampleSize; i += 10) {
-    const value = Math.round(typedData[i]);
-    uniqueValues.add(value);
-
-    // If we find too many unique values or values outside expected range, not segmentation
-    if (uniqueValues.size > 10 || value > 10 || value < 0) {
-      return false;
-    }
-  }
-
-  // If we have only a few integer values (typical for segmentation), likely segmentation
-  return uniqueValues.size <= 5;
-};
 
 // Apply windowing/leveling to convert intensity to display value
 const applyWindowing = (intensity: number, windowCenter: number, windowWidth: number): number => {

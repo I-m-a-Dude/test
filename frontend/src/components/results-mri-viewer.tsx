@@ -1,5 +1,3 @@
-// În frontend/src/components/results-mri-viewer.tsx - modifică logica de desenare
-
 import React, { useState, useEffect, useRef } from 'react';
 import * as nifti from 'nifti-reader-js';
 import pako from 'pako';
@@ -9,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle } from 'lucide-react';
 import { ViewerToolbar } from './viewer-toolbar';
 import { cn } from '@/utils/cn';
-import { getDataType, calculateAndSetChartData, drawSlice, drawSliceWithOverlay, isSegmentationFile } from '@/utils/mriUtils';
+import { getDataType, calculateAndSetChartData, drawSlice, drawSliceWithOverlay } from '@/utils/mriUtils';
 
 export function ResultsMriViewer() {
   const { currentFile, slice, zoom, axis, pan, setPan, setMaxSlices, zoomIn, zoomOut } = useResultsViewerStore();
@@ -33,8 +31,7 @@ export function ResultsMriViewer() {
   const [niftiImage, setNiftiImage] = useState<ArrayBuffer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSegmentation, setIsSegmentation] = useState(false);
-  const [isOverlay, setIsOverlay] = useState(false); // FIXED: Adăugat flag pentru overlay
+  const [isOverlay, setIsOverlay] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [isPanning, setIsPanning] = useState(false);
@@ -86,43 +83,14 @@ export function ResultsMriViewer() {
 
         console.log(`Image data loaded: ${image.byteLength} bytes`);
 
-        // Convert to typed data for detection
-        let typedData: Float32Array;
-        switch (header.datatype || header.datatypeCode) {
-          case nifti.NIFTI1.TYPE_INT16:
-            typedData = new Float32Array(new Int16Array(image));
-            break;
-          case nifti.NIFTI1.TYPE_UINT16:
-            typedData = new Float32Array(new Uint16Array(image));
-            break;
-          case nifti.NIFTI1.TYPE_INT32:
-            typedData = new Float32Array(new Int32Array(image));
-            break;
-          case nifti.NIFTI1.TYPE_UINT32:
-            typedData = new Float32Array(new Uint32Array(image));
-            break;
-          case nifti.NIFTI1.TYPE_FLOAT32:
-            typedData = new Float32Array(image);
-            break;
-          case nifti.NIFTI1.TYPE_FLOAT64:
-            { const float64Data = new Float64Array(image);
-            typedData = new Float32Array(float64Data);
-            break; }
-          default:
-            typedData = new Float32Array(image);
-        }
-
-        // FIXED: Detectează separat overlay și segmentare
+        // Detectează doar overlay-ul
         const overlayDetected = currentFile.name.toLowerCase().includes('-overlay') ||
                                currentFile.name.toLowerCase().includes('_overlay');
-        const segmentationDetected = !overlayDetected && isSegmentationFile(currentFile.name, typedData);
 
         setIsOverlay(overlayDetected);
-        setIsSegmentation(segmentationDetected);
 
         console.log('File type detection:', {
           isOverlay: overlayDetected,
-          isSegmentation: segmentationDetected,
           filename: currentFile.name
         });
 
@@ -136,7 +104,7 @@ export function ResultsMriViewer() {
           coronal: dims[2] || 1,
         });
 
-        // CRITICAL FIX: Pentru overlay RGB, setează windowing fix în loc să calculezi
+        // Pentru overlay RGB, setează windowing fix în loc să calculezi
         let windowing;
         if (overlayDetected) {
           // Pentru overlay RGB, folosește range-ul standard RGB [0-255]
@@ -175,7 +143,7 @@ export function ResultsMriViewer() {
           'Q-form Code': header.qform_code || 0,
           'S-form Code': header.sform_code || 0,
           'Intent Name': header.intent_name || 'N/A',
-          'File Type': overlayDetected ? 'Overlay (T1N + Segmentation)' : segmentationDetected ? 'Segmentation' : 'MRI Data',
+          'File Type': overlayDetected ? 'Overlay (T1N + Segmentation)' : 'MRI Data',
         });
 
       } catch (err) {
@@ -189,11 +157,10 @@ export function ResultsMriViewer() {
     loadNiftiFile();
   }, [currentFile, setMaxSlices, setHistogramData, setProfileCurveData, setMetadata, setWindowCenter, setWindowWidth, setIntensityRange]);
 
-
   useEffect(() => {
     if (!loading && !error && niftiHeader && niftiImage && canvasRef.current) {
       try {
-        // FIXED: Folosește funcția corectă în funcție de tipul fișierului
+        // Folosește funcția corectă în funcție de tipul fișierului
         if (isOverlay) {
           // Pentru overlay: desenează direct cu culorile existente
           drawSliceWithOverlay({
@@ -230,7 +197,7 @@ export function ResultsMriViewer() {
         setError(`Failed to render slice: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
-  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, windowCenter, windowWidth, sliceThickness, useWindowing, isSegmentation, isOverlay]);
+  }, [slice, axis, loading, error, niftiHeader, niftiImage, brightness, contrast, windowCenter, windowWidth, sliceThickness, useWindowing, isOverlay]);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -317,8 +284,6 @@ export function ResultsMriViewer() {
             <div className="absolute bottom-2 left-2 bg-black/80 text-white text-xs px-2 py-1 rounded backdrop-blur">
                 {isOverlay ? (
                   'AI Overlay (T1N + Segmentation)'
-                ) : isSegmentation ? (
-                  'Segmentation View'
                 ) : useWindowing ? (
                   `WC: ${windowCenter.toFixed(0)} WW: ${windowWidth.toFixed(0)}`
                 ) : (
