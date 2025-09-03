@@ -22,7 +22,6 @@ interface MriState {
   setLoadingFromBackend: (loading: boolean) => void;
   setLastKnownBackendFile: (filename: string | null) => void;
   loadFileFromBackend: (filename: string) => Promise<void>;
-  restoreFromBackend: () => Promise<void>;
   resetUploadState: () => void;
   clearAll: () => void;
 }
@@ -92,9 +91,7 @@ export const useMriStore = create<MriState>((set, get) => ({
     }
   },
 
-  restoreFromBackend: async () => {
-    console.log('[STORE] Restaurează fișierul din backend dacă există');
-  },
+
 
   resetUploadState: () => set({
     isUploading: false,

@@ -25,7 +25,6 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
     setFile,
     setLastKnownBackendFile,
     loadFileFromBackend,
-    restoreFromBackend
   } = useMriStore();
   const setAnalysisResult = useResultStore((state) => state.setAnalysisResult);
 
@@ -40,20 +39,6 @@ export function MriUploader({ onOpenFileManager }: MriUploaderProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Auto-restore la prima încărcare
-  useEffect(() => {
-    const attemptRestore = async () => {
-      if (!file && !isLoadingFromBackend) {
-        try {
-          await restoreFromBackend();
-        } catch (error) {
-          console.log('[UPLOADER] Restore automată eșuată:', error);
-        }
-      }
-    };
-
-    attemptRestore();
-  }, [file, isLoadingFromBackend, restoreFromBackend]);
 
   const getMriModalityInfo = (filename: string) => {
     const lower = filename.toLowerCase();
