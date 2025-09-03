@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function HomePage() {
   const [fileManagerOpen, setFileManagerOpen] = useState(false);
@@ -43,7 +44,7 @@ export default function HomePage() {
 
         {/* File Manager Dialog with callback for loading into viewer */}
         <Dialog open={fileManagerOpen} onOpenChange={setFileManagerOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden p-0">
+          <DialogContent className="max-w-4xl max-h-[80vh] p-0">
             <DialogHeader className="p-6 pb-0">
               <DialogTitle className="flex items-center gap-2">
                 <FolderOpen className="h-5 w-5" />
@@ -55,7 +56,7 @@ export default function HomePage() {
                 <strong>Tip:</strong> Use the "View in viewer" button to directly load a NIfTI file into the viewer.
               </DialogDescription>
             </DialogHeader>
-            <div className="p-6 pt-0 overflow-auto">
+            <div className="px-6 pb-6 h-[calc(80vh-140px)] overflow-auto">
               <FileManager onFileLoaded={handleFileLoadedInViewer} />
             </div>
           </DialogContent>

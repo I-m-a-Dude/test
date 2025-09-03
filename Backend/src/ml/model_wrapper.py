@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Model wrapper pentru MedNeXt cu MONAI
+Model wrapper pentru MedNeXt cu MONAI - cu cleanup agresiv
 """
 import torch
 import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
+import gc
+import time
 
 try:
     from monai.networks.nets import MedNeXt
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class MedNeXtWrapper:
     """
-    Wrapper pentru modelul MedNeXt din MONAI
+    Wrapper pentru modelul MedNeXt din MONAI cu cleanup agresiv
     Gestioneaza incarcarea, inferenta si management-ul device-ului
     """
 
@@ -33,6 +35,8 @@ class MedNeXtWrapper:
         self.device = None
         self.is_loaded = False
         self.model_path = MODEL_PATH
+        self.inference_count = 0
+        self.max_inferences_before_cleanup = 5  # Cleanup preventiv dupA 5 inferente
 
         # Initializeaza device-ul
         self._setup_device()
@@ -88,57 +92,164 @@ class MedNeXtWrapper:
 
         return model
 
+    def force_gpu_cleanup(self) -> None:
+        """
+        CLEANUP AGRESIV - Forteaza eliberarea completA a memoriei GPU
+        """
+        print("[CLEANUP] ⚡ Cleanup GPU agresiv incepe...")
+        cleanup_start = time.time()
+
+        # MemoreazA starea initialA
+        initial_memory = 0
+        if torch.cuda.is_available():
+            initial_memory = torch.cuda.memory_allocated() / 1024 ** 2
+            print(f"[CLEANUP] Memorie initialA: {initial_memory:.1f}MB")
+
+        try:
+            # 1. MODEL CLEANUP - MutA pe CPU inainte de stergere
+            if hasattr(self, 'model') and self.model is not None:
+                print("[CLEANUP] 🧠 Cleanup model...")
+
+                # MutA toate parametrii pe CPU
+                if self.device.type == 'cuda':
+                    self.model.cpu()
+                    print("[CLEANUP] Model mutat pe CPU")
+
+                # sterge toate referintele
+                del self.model
+                self.model = None
+                print("[CLEANUP] Model sters")
+
+            # 2. CLEAR ALL GPU CACHE - Multiple passes pentru memoria indrAzneatA
+            if torch.cuda.is_available():
+                print("[CLEANUP] 💾 Cleanup cache CUDA...")
+
+                # Primul val de cleanup
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+                # Multiple passes pentru memoria care nu vrea sA plece
+                for i in range(5):
+                    torch.cuda.empty_cache()
+                    if i % 2 == 0:
+                        torch.cuda.synchronize()
+                    time.sleep(0.01)  # LasA timp pentru cleanup
+
+                print("[CLEANUP] Cache CUDA golit")
+
+            # 3. PYTHON GARBAGE COLLECTION - Agresiv
+            print("[CLEANUP] 🗑️ Garbage collection Python...")
+
+            # Multiple passes de garbage collection
+            for i in range(3):
+                collected = gc.collect()
+                if collected > 0:
+                    print(f"[CLEANUP] GC pass {i + 1}: {collected} obiecte colectate")
+
+            # DezactiveazA temporar GC automat pentru cleanup controlat
+            gc.disable()
+            time.sleep(0.05)
+            gc.enable()
+
+            # Final cleanup
+            gc.collect()
+
+            # 4. RESET MEMORY STATS (informativ)
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+                print("[CLEANUP] Memory stats resetate")
+
+            # 5. FINAL VERIFICATION
+            final_memory = 0
+            if torch.cuda.is_available():
+                # ForteazA o ultimA sincronizare
+                torch.cuda.synchronize()
+                final_memory = torch.cuda.memory_allocated() / 1024 ** 2
+                memory_freed = initial_memory - final_memory
+
+                print(f"[CLEANUP] ✅ Cleanup complet!")
+                print(f"    - Memorie initialA: {initial_memory:.1f}MB")
+                print(f"    - Memorie finalA: {final_memory:.1f}MB")
+                print(f"    - Memorie eliberatA: {memory_freed:.1f}MB")
+            else:
+                print(f"[CLEANUP] ✅ Cleanup CPU complet!")
+
+            cleanup_time = time.time() - cleanup_start
+            print(f"[CLEANUP] Timp total cleanup: {cleanup_time:.2f}s")
+
+        except Exception as e:
+            print(f"[CLEANUP ERROR] ❌ Eroare in cleanup agresiv: {str(e)}")
+            logger.error(f"Eroare cleanup agresiv: {str(e)}")
+
+            # Emergency cleanup in caz de eroare
+            try:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                gc.collect()
+                print("[CLEANUP] Emergency cleanup executat")
+            except:
+                print("[CLEANUP] Emergency cleanup a esuat")
+
     def load_model(self, model_path: Optional[Path] = None) -> bool:
         """
-        incarca modelul din fisierul .pth
+        incarcA modelul din fisierul .pth cu cleanup preventiv
 
         Args:
-            model_path: Calea catre fisierul model (optional)
+            model_path: Calea cAtre fisierul model (optional)
 
         Returns:
-            True daca incarcarea a reusit
+            True dacA incArcarea a reusit
         """
         if model_path is None:
             model_path = self.model_path
 
         try:
-            print(f"[ML] incarca model din: {model_path}")
+            print(f"[ML] incarcA model din: {model_path}")
 
-            # Verifica daca fisierul exista
+            # Cleanup preventiv inainte de incArcare
+            if self.is_loaded:
+                print("[ML] Cleanup preventiv inainte de reincArcare...")
+                self.force_gpu_cleanup()
+
+            # VerificA dacA fisierul existA
             if not model_path.exists():
-                raise FileNotFoundError(f"Modelul nu exista: {model_path}")
+                raise FileNotFoundError(f"Modelul nu existA: {model_path}")
 
-            # Creeaza modelul
+            # CreeazA modelul
             self.model = self._create_model()
 
-            # incarca state dict
+            # incarcA state dict
             checkpoint = torch.load(model_path, map_location=self.device)
 
-            # Gestioneaza diferite formate de checkpoint
+            # GestioneazA diferite formate de checkpoint
             if isinstance(checkpoint, dict):
                 if 'model_state_dict' in checkpoint:
                     state_dict = checkpoint['model_state_dict']
-                    print("[ML] incarcat din checkpoint cu model_state_dict")
+                    print("[ML] incArcat din checkpoint cu model_state_dict")
                 elif 'state_dict' in checkpoint:
                     state_dict = checkpoint['state_dict']
-                    print("[ML] incarcat din checkpoint cu state_dict")
+                    print("[ML] incArcat din checkpoint cu state_dict")
                 else:
                     state_dict = checkpoint
-                    print("[ML] incarcat direct din dictionar")
+                    print("[ML] incArcat direct din dictionar")
             else:
                 state_dict = checkpoint
-                print("[ML] incarcat model direct")
+                print("[ML] incArcat model direct")
 
-            # incarca weights in model
+            # incarcA weights in model
             self.model.load_state_dict(state_dict, strict=True)
 
-            # Seteaza modelul in modul evaluare
+            # SeteazA modelul in modul evaluare
             self.model.eval()
 
+            # Reset contorul de inferente
+            self.inference_count = 0
             self.is_loaded = True
-            print(f"[ML] Model incarcat cu succes!")
 
-            # Afiseaza informatii despre checkpoint daca sunt disponibile
+            print(f"[ML] ✅ Model incArcat cu succes!")
+
+            # AfiseazA informatii despre checkpoint dacA sunt disponibile
             if isinstance(checkpoint, dict):
                 if 'epoch' in checkpoint:
                     print(f"    - Epoca: {checkpoint['epoch']}")
@@ -150,15 +261,18 @@ class MedNeXtWrapper:
             return True
 
         except Exception as e:
-            logger.error(f"Eroare la incarcarea modelului: {str(e)}")
-            print(f"[ML] EROARE la incarcarea modelului: {str(e)}")
+            logger.error(f"Eroare la incArcarea modelului: {str(e)}")
+            print(f"[ML] ❌ EROARE la incArcarea modelului: {str(e)}")
+
+            # Cleanup in caz de eroare
+            self.force_gpu_cleanup()
             self.model = None
             self.is_loaded = False
             return False
 
     def predict(self, input_tensor: torch.Tensor) -> torch.Tensor:
         """
-        Executa inferenta pe input tensor
+        ExecutA inferenta pe input tensor cu cleanup preventiv
 
         Args:
             input_tensor: Tensor de input (B, C, H, W, D)
@@ -167,26 +281,35 @@ class MedNeXtWrapper:
             Tensor cu predictiile (B, NUM_CLASSES, H, W, D)
 
         Raises:
-            RuntimeError: Daca modelul nu este incarcat
+            RuntimeError: DacA modelul nu este incArcat
         """
         if not self.is_loaded or self.model is None:
-            raise RuntimeError("Modelul nu este incarcat. Apeleaza load_model() mai intai.")
+            raise RuntimeError("Modelul nu este incArcat. ApeleazA load_model() mai intAi.")
 
         try:
-            # Verifica input shape
+            # VerificA input shape
             expected_channels = NUM_CHANNELS
             if input_tensor.shape[1] != expected_channels:
                 raise ValueError(
                     f"Input tensor are {input_tensor.shape[1]} canale, "
-                    f"dar modelul asteapta {expected_channels}"
+                    f"dar modelul asteaptA {expected_channels}"
                 )
 
-            print(f"[ML] Inferenta pe tensor shape: {list(input_tensor.shape)}")
+            print(f"[ML] Inferenta #{self.inference_count + 1} pe tensor shape: {list(input_tensor.shape)}")
 
-            # Muta tensorul pe device
+            # CLEANUP PREVENTIV dacA am ajuns la limita
+            if self.inference_count >= self.max_inferences_before_cleanup:
+                print(f"[ML] 🔄 Cleanup preventiv dupA {self.inference_count} inferente")
+                self.force_gpu_cleanup()
+
+                # ReincarcA modelul pentru a fi siguri
+                if not self.load_model():
+                    raise RuntimeError("ReincArcarea modelului dupA cleanup a esuat")
+
+            # MutA tensorul pe device
             input_tensor = input_tensor.to(self.device)
 
-            # Inferenta
+            # Inferenta cu timing
             with torch.no_grad():
                 start_time = torch.cuda.Event(enable_timing=True) if self.device.type == 'cuda' else None
                 end_time = torch.cuda.Event(enable_timing=True) if self.device.type == 'cuda' else None
@@ -194,23 +317,37 @@ class MedNeXtWrapper:
                 if self.device.type == 'cuda':
                     start_time.record()
 
+                # INFERENtA PROPRIU-ZISA
                 output = self.model(input_tensor)
 
                 if self.device.type == 'cuda':
                     end_time.record()
                     torch.cuda.synchronize()
                     inference_time = start_time.elapsed_time(end_time) / 1000.0  # in secunde
-                    print(f"[ML] Timp inferenta GPU: {inference_time:.2f}s")
+                    print(f"[ML] ✅ Timp inferentA GPU: {inference_time:.2f}s")
                 else:
-                    print(f"[ML] Inferenta pe CPU completa")
+                    print(f"[ML] ✅ InferentA pe CPU completA")
 
             print(f"[ML] Output shape: {list(output.shape)}")
+
+            # IncrementeazA contorul
+            self.inference_count += 1
+
+            # Cleanup usor dupA fiecare inferentA
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             return output
 
         except Exception as e:
-            logger.error(f"Eroare la inferenta: {str(e)}")
-            raise RuntimeError(f"Eroare la inferenta: {str(e)}")
+            logger.error(f"Eroare la inferentA: {str(e)}")
+            print(f"[ML] ❌ EROARE la inferentA: {str(e)}")
+
+            # Cleanup in caz de eroare
+            print("[ML] 🚨 Cleanup de urgentA dupA eroare...")
+            self.force_gpu_cleanup()
+
+            raise RuntimeError(f"Eroare la inferentA: {str(e)}")
 
     def get_model_info(self) -> Dict[str, Any]:
         """
@@ -223,6 +360,8 @@ class MedNeXtWrapper:
             "is_loaded": self.is_loaded,
             "device": str(self.device),
             "model_path": str(self.model_path),
+            "inference_count": self.inference_count,
+            "max_inferences_before_cleanup": self.max_inferences_before_cleanup,
             "config": {
                 "in_channels": NUM_CHANNELS,
                 "out_channels": NUM_CLASSES,
@@ -247,49 +386,27 @@ class MedNeXtWrapper:
 
     def unload_model(self) -> bool:
         """
-        Descarca modelul din memorie si elibereaza resursele
+        DescarcA modelul din memorie folosind cleanup agresiv
 
         Returns:
-            True daca descarcarea a reusit
+            True dacA descArcarea a reusit
         """
         try:
-            memory_before = 0
-            if torch.cuda.is_available():
-                memory_before = torch.cuda.memory_allocated() / 1024 ** 2
+            print("[ML] 🔄 incepe descArcarea modelului...")
 
-            if self.model is not None:
-                print("[ML] Descarcare model din memorie...")
+            # Foloseste cleanup agresiv
+            self.force_gpu_cleanup()
 
-                # Muta modelul pe CPU inainte de stergere (elibereaza GPU memory)
-                if self.device.type == 'cuda':
-                    self.model.cpu()
-
-                # sterge modelul
-                del self.model
-                self.model = None
-
+            # Reset toate flag-urile
             self.is_loaded = False
+            self.inference_count = 0
 
-            # Curata cache-ul CUDA complet
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-
-                memory_after = torch.cuda.memory_allocated() / 1024 ** 2
-                memory_freed = memory_before - memory_after
-
-                print(f"[ML] Model descarcat cu succes!")
-                print(f"    - Memorie GPU inainte: {memory_before:.1f}MB")
-                print(f"    - Memorie GPU dupa: {memory_after:.1f}MB")
-                print(f"    - Memorie eliberata: {memory_freed:.1f}MB")
-            else:
-                print("[ML] Model descarcat cu succes din memoria CPU!")
-
+            print("[ML] ✅ Model descArcat cu succes!")
             return True
 
         except Exception as e:
-            logger.error(f"Eroare la descarcarea modelului: {str(e)}")
-            print(f"[ML] EROARE la descarcarea modelului: {str(e)}")
+            logger.error(f"Eroare la descArcarea modelului: {str(e)}")
+            print(f"[ML] ❌ EROARE la descArcarea modelului: {str(e)}")
             return False
 
     def get_memory_usage(self) -> Dict[str, float]:
@@ -301,7 +418,9 @@ class MedNeXtWrapper:
         """
         memory_info = {
             "cpu_model_loaded": self.is_loaded,
-            "gpu_available": torch.cuda.is_available()
+            "gpu_available": torch.cuda.is_available(),
+            "inference_count": self.inference_count,
+            "max_inferences_before_cleanup": self.max_inferences_before_cleanup
         }
 
         if torch.cuda.is_available():
@@ -317,49 +436,27 @@ class MedNeXtWrapper:
 
     def force_cleanup(self) -> None:
         """
-        Forteaza cleanup complet al tuturor resurselor
+        Alias pentru force_gpu_cleanup() pentru compatibilitate
         """
-        print("[ML] Cleanup fortat al tuturor resurselor...")
-
-        try:
-            # Descarca modelul
-            self.unload_model()
-
-            # Cleanup agresiv pentru CUDA
-            if torch.cuda.is_available():
-                for device_id in range(torch.cuda.device_count()):
-                    with torch.cuda.device(device_id):
-                        torch.cuda.empty_cache()
-                        torch.cuda.synchronize()
-
-                print("[ML] Cleanup CUDA complet")
-
-            # Reset variabile
-            self.model = None
-            self.is_loaded = False
-
-            print("[ML] Cleanup fortat completat")
-
-        except Exception as e:
-            print(f"[ML] Eroare la cleanup fortat: {str(e)}")
+        self.force_gpu_cleanup()
 
     def __del__(self):
-        """Destructor - cleanup automat"""
+        """Destructor cu cleanup automat agresiv"""
         try:
             if hasattr(self, 'is_loaded') and self.is_loaded:
-                print("[ML] Destructor: cleanup automat model")
-                self.force_cleanup()
+                print("[ML] 🧹 Destructor: cleanup automat model")
+                self.force_gpu_cleanup()
         except:
-            pass  # Ignora erorile in destructor
+            pass  # IgnorA erorile in destructor
 
 
-# Instanta globala singleton
+# Instanta globala singleton cu cleanup imbunAtAtit
 _model_wrapper = None
 
 
 def get_model_wrapper() -> MedNeXtWrapper:
     """
-    Returneaza instanta globala a model wrapper-ului (singleton pattern)
+    Returneaza instanta globala a model wrapper-ului (singleton pattern) cu cleanup
 
     Returns:
         Instanta MedNeXtWrapper
@@ -372,7 +469,7 @@ def get_model_wrapper() -> MedNeXtWrapper:
 
 def ensure_model_loaded() -> bool:
     """
-    Asigura ca modelul este incarcat
+    Asigura ca modelul este incarcat cu cleanup preventiv
 
     Returns:
         True daca modelul este incarcat cu succes
@@ -385,7 +482,7 @@ def ensure_model_loaded() -> bool:
 
 def unload_global_model() -> bool:
     """
-    Descarca modelul global si elibereaza memoria
+    Descarca modelul global si elibereaza memoria folosind cleanup agresiv
 
     Returns:
         True daca descarcarea a reusit
@@ -399,14 +496,14 @@ def unload_global_model() -> bool:
 
 def force_global_cleanup() -> None:
     """
-    Forteaza cleanup complet al tuturor resurselor globale
+    Forteaza cleanup agresiv complet al tuturor resurselor globale
     """
     global _model_wrapper
     if _model_wrapper is not None:
-        _model_wrapper.force_cleanup()
+        _model_wrapper.force_gpu_cleanup()
         _model_wrapper = None
 
-    print("[ML] Cleanup global complet")
+    print("[ML] ✅ Cleanup global agresiv complet")
 
 
 def get_global_memory_usage() -> Dict:

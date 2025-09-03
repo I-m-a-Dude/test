@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-MediView Backend - Entry Point
+MediView Backend - Entry Point cu shutdown graceful fix
 """
 import sys
 import signal
 import atexit
+import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,6 +35,9 @@ if sys.platform.startswith('win'):
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
 
+# Flag global pentru shutdown graceful
+shutdown_event = threading.Event()
+
 
 def cleanup_resources():
     """Functie de cleanup la inchiderea aplicatiei"""
@@ -50,23 +54,30 @@ def cleanup_resources():
 
 
 def signal_handler(signum, frame):
-    """Handler pentru semnale de inchidere"""
+    """Handler pentru semnale de inchidere - FIXED"""
     print(f"\n[SHUTDOWN] Semnal primit: {signum}")
-    cleanup_resources()
-    sys.exit(0)
+
+    # Seteaza flag-ul pentru shutdown
+    shutdown_event.set()
+
+    # NU mai folosim sys.exit(0) - lasam uvicorn sa gestioneze shutdown-ul
+    print("[SHUTDOWN] Shutdown graceful initiat...")
 
 
-# inregistreaza cleanup-ul pentru diferite moduri de inchidere
+# Inregistreaza cleanup-ul pentru diferite moduri de inchidere
 atexit.register(cleanup_resources)
-signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-signal.signal(signal.SIGTERM, signal_handler)  # inchidere normala
 
-# Windows specific
-if sys.platform.startswith('win'):
-    try:
-        signal.signal(signal.SIGBREAK, signal_handler)  # Ctrl+Break pe Windows
-    except AttributeError:
-        pass
+# Inregistreaza signal handlers DOAR daca nu ruleaza in reload mode
+if not RELOAD:
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # inchidere normala
+
+    # Windows specific
+    if sys.platform.startswith('win'):
+        try:
+            signal.signal(signal.SIGBREAK, signal_handler)  # Ctrl+Break pe Windows
+        except AttributeError:
+            pass
 
 # Creeaza aplicatia FastAPI
 app = FastAPI(
@@ -102,16 +113,21 @@ async def startup_event():
     if ML_CLEANUP_AVAILABLE:
         print(" Sistem ML disponibil")
     else:
-        print("  Sistem ML indisponibil")
+        print(" Sistem ML indisponibil")
 
     print("=" * 60)
 
 
-# Functie de shutdown
+# Functie de shutdown - FIXED
 @app.on_event("shutdown")
 async def shutdown_event():
+    """Shutdown event pentru FastAPI - gestioneaza cleanup graceful"""
     print("\n[FASTAPI SHUTDOWN] Oprirea aplicatiei FastAPI...")
+
+    # Cleanup resursele
     cleanup_resources()
+
+    print("[FASTAPI SHUTDOWN] Shutdown complet")
 
 
 if __name__ == "__main__":
@@ -119,20 +135,34 @@ if __name__ == "__main__":
 
     print(f"Pornire server pe {HOST}:{PORT}")
     print(f"Reload mode: {RELOAD}")
+
+    if RELOAD:
+        print("NOTA: Signal handlers dezactivati in reload mode")
+
     print("Ctrl+C pentru oprire")
 
     try:
-        uvicorn.run(
+        # Configurare uvicorn cu gestionare imbunatatita a signal-urilor
+        config = uvicorn.Config(
             "main:app",
             host=HOST,
             port=PORT,
             reload=RELOAD,
-            log_level="info"
+            log_level="info",
+            # Timeout mai mare pentru shutdown graceful
+            timeout_graceful_shutdown=10
         )
+
+        server = uvicorn.Server(config)
+        server.run()
+
     except KeyboardInterrupt:
-        print("\n[MAIN] Oprire fortata prin Ctrl+C")
+        print("\n[MAIN] Oprire prin Ctrl+C")
     except Exception as e:
         print(f"\n[MAIN] Eroare neasteptata: {str(e)}")
     finally:
         print("[MAIN] Cleanup final...")
-        cleanup_resources()
+
+        # Cleanup final doar daca nu s-a facut deja
+        if not shutdown_event.is_set():
+            cleanup_resources()
