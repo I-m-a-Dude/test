@@ -79,7 +79,20 @@ Backend/
 │   │   └── nifti_io.py       # Citire/scriere NIfTI cu nibabel
 │   └── main.py        # Instanțiere FastAPI și pornire server
 ├── temp/              # Fișiere temporare
-├── tests/             # Teste unitare și de integrare
+├── tests/
+│   ├── __init__.py
+│   ├── test_api/
+│   │   ├── test_health.py
+│   │   └── test_upload.py
+│   ├── test_services/
+│   │   ├── test_preprocessing.py
+│   │   ├── test_inference.py
+│   │   └── test_postprocessing.py
+│   ├── test_models/
+│   │   └── test_model_wrapper.py
+│   └── test_utils/
+│       ├── test_nifti_io.py
+│       └── test_file_utils.py
 ├── uploads/           # Fișiere uploadate de utilizatori
 ├── README.md          # Descriere proiect
 └── requirements.txt   # Dependențe Python
