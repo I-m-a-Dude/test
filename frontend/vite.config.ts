@@ -9,5 +9,13 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src')
     }
-  }
+  },
+  // Adaugă aceste configurații pentru Docker
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    watch: {
+      usePolling: true,
+    },
+  },
 })
