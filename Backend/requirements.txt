@@ -18,3 +18,8 @@ psutil
 pillow
 python-multipart
 python-decouple
+
+#pt testare
+pytest
+pytest-cov
+pytest-mock
