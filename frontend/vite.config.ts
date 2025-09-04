@@ -10,6 +10,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
+
   // Adaugă aceste configurații pentru Docker
   server: {
     host: '0.0.0.0',
@@ -17,5 +18,13 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
+  },
+
+  // Configurație pentru testare cu Vitest
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
   },
 })
