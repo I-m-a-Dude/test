@@ -300,3 +300,144 @@ async def get_folder_files(folder_name: str):
     except Exception as e:
         print(f"[ERROR] Eroare la listarea fisierelor din folder {folder_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Eroare la listarea folderului: {str(e)}")
+
+    # Adaugă acest endpoint în Backend/src/api/files.py
+
+@router.get("/{folder_name}/download-zip")
+async def download_folder_as_zip(folder_name: str):
+        """
+        Descarcă un folder întreg ca fișier ZIP
+        """
+        try:
+            folder_path = UPLOAD_DIR / folder_name
+
+            if not folder_path.exists() or not folder_path.is_dir():
+                raise HTTPException(status_code=404, detail=f"Folderul {folder_name} nu există")
+
+            print(f"[INFO] Creează ZIP pentru folderul: {folder_name}")
+
+            # Creează un fișier ZIP temporar
+            import tempfile
+            import zipfile
+            import os
+            from fastapi.responses import StreamingResponse
+
+            # Creează un fișier temporar pentru ZIP
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+                zip_path = temp_zip.name
+
+            try:
+                # Creează ZIP-ul cu toate fișierele din folder
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Parcurge recursiv toate fișierele din folder
+                    for file_path in folder_path.rglob('*'):
+                        if file_path.is_file():
+                            # Calculează calea relativă în ZIP
+                            arcname = file_path.relative_to(folder_path)
+                            zip_file.write(file_path, arcname)
+                            print(f"[INFO] Adăugat în ZIP: {arcname}")
+
+                # Verifică că ZIP-ul a fost creat cu succes
+                if not os.path.exists(zip_path):
+                    raise Exception("Fișierul ZIP nu a fost creat")
+
+                zip_size = os.path.getsize(zip_path)
+                print(f"[SUCCESS] ZIP creat: {zip_path} ({get_file_size_mb(zip_size)})")
+
+                # Creează un generator pentru streaming
+                def generate_zip():
+                    try:
+                        with open(zip_path, 'rb') as zip_file:
+                            while True:
+                                chunk = zip_file.read(8192)  # 8KB chunks
+                                if not chunk:
+                                    break
+                                yield chunk
+                    finally:
+                        # Șterge fișierul temporar după streaming
+                        try:
+                            os.unlink(zip_path)
+                            print(f"[CLEANUP] Fișier temporar șters: {zip_path}")
+                        except Exception as cleanup_error:
+                            print(f"[WARNING] Nu s-a putut șterge fișierul temporar: {cleanup_error}")
+
+                # Numele fișierului ZIP pentru download
+                zip_filename = f"{folder_name}.zip"
+
+                return StreamingResponse(
+                    generate_zip(),
+                    media_type="application/zip",
+                    headers={
+                        "Content-Disposition": f"attachment; filename={zip_filename}",
+                        "Content-Length": str(zip_size)
+                    }
+                )
+
+            except Exception as zip_error:
+                # Cleanup în caz de eroare
+                try:
+                    if os.path.exists(zip_path):
+                        os.unlink(zip_path)
+                except:
+                    pass
+                raise zip_error
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[ERROR] Eroare la crearea ZIP pentru {folder_name}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Eroare la crearea ZIP: {str(e)}")
+
+@router.get("/{folder_name}/info-detailed")
+async def get_folder_detailed_info(folder_name: str):
+        """
+        Obține informații detaliate despre un folder (pentru preview înainte de download)
+        """
+        try:
+            folder_path = UPLOAD_DIR / folder_name
+
+            if not folder_path.exists() or not folder_path.is_dir():
+                raise HTTPException(status_code=404, detail=f"Folderul {folder_name} nu există")
+
+            files_info = []
+            total_size = 0
+            nifti_count = 0
+
+            # Parcurge recursiv toate fișierele
+            for file_path in folder_path.rglob('*'):
+                if file_path.is_file():
+                    stat = file_path.stat()
+                    relative_path = file_path.relative_to(folder_path)
+
+                    file_info = {
+                        "name": file_path.name,
+                        "relative_path": str(relative_path),
+                        "size": stat.st_size,
+                        "size_mb": get_file_size_mb(stat.st_size),
+                        "modified": stat.st_mtime,
+                        "extension": file_path.suffix,
+                        "is_nifti": file_path.name.endswith('.nii') or file_path.name.endswith('.nii.gz')
+                    }
+
+                    files_info.append(file_info)
+                    total_size += stat.st_size
+
+                    if file_info["is_nifti"]:
+                        nifti_count += 1
+
+            return {
+                "folder_name": folder_name,
+                "folder_path": str(folder_path.absolute()),
+                "total_files": len(files_info),
+                "total_size": total_size,
+                "total_size_mb": get_file_size_mb(total_size),
+                "nifti_files_count": nifti_count,
+                "files": files_info,
+                "estimated_zip_size_mb": get_file_size_mb(int(total_size * 0.9))  # Estimare după compresie
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[ERROR] Eroare la obținerea informațiilor pentru {folder_name}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Eroare la obținerea informațiilor: {str(e)}")

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle, Eye, FolderOpen, Brain } from 'lucide-react';
+import { Download, Trash2, RefreshCw, File, Calendar, HardDrive, Folder, FileArchive, CheckCircle, AlertTriangle, Eye, FolderOpen, Brain, Archive, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/utils/hooks/use-toast';
 import { useMriStore } from '@/utils/stores/mri-store';
-import { getUploadedFiles, downloadFileAttachment, deleteUploadedFile, loadFileForViewing } from '@/utils/api';
+import { getUploadedFiles, downloadFileAttachment, deleteUploadedFile, loadFileForViewing, downloadFolderAsZip, getFolderDetailedInfo } from '@/utils/api';
 import { cn } from '@/utils/cn';
 
 interface FileItem {
@@ -31,6 +33,25 @@ interface FilesResponse {
   folders_count: number;
 }
 
+interface FolderDetailedInfo {
+  folder_name: string;
+  folder_path: string;
+  total_files: number;
+  total_size: number;
+  total_size_mb: string;
+  nifti_files_count: number;
+  estimated_zip_size_mb: string;
+  files: Array<{
+    name: string;
+    relative_path: string;
+    size: number;
+    size_mb: string;
+    modified: number;
+    extension: string;
+    is_nifti: boolean;
+  }>;
+}
+
 interface FileManagerProps {
   onFileLoaded?: () => void;
 }
@@ -39,6 +60,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadingZip, setDownloadingZip] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [loadingInViewer, setLoadingInViewer] = useState<string | null>(null);
 
@@ -47,6 +69,12 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
   const [selectedFolder, setSelectedFolder] = useState<FileItem | null>(null);
   const [selectedNiftiFile, setSelectedNiftiFile] = useState<string | null>(null);
   const [isLoadingSelectedFile, setIsLoadingSelectedFile] = useState(false);
+
+  // States for ZIP download preview
+  const [showZipPreview, setShowZipPreview] = useState(false);
+  const [zipPreviewFolder, setZipPreviewFolder] = useState<string | null>(null);
+  const [zipPreviewInfo, setZipPreviewInfo] = useState<FolderDetailedInfo | null>(null);
+  const [loadingZipPreview, setLoadingZipPreview] = useState(false);
 
   const { toast } = useToast();
   const { setFile, setLastKnownBackendFile } = useMriStore();
@@ -137,6 +165,53 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     }
   };
 
+  const handleDownloadZipPreview = async (folderName: string) => {
+    setZipPreviewFolder(folderName);
+    setLoadingZipPreview(true);
+    setShowZipPreview(true);
+
+    try {
+      const info = await getFolderDetailedInfo(folderName);
+      setZipPreviewInfo(info);
+    } catch (error) {
+      console.error('Error loading folder info:', error);
+      toast({
+        title: 'Error loading folder info',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        variant: 'destructive',
+        duration: 3000,
+      });
+      setShowZipPreview(false);
+    } finally {
+      setLoadingZipPreview(false);
+    }
+  };
+
+  const handleConfirmDownloadZip = async () => {
+    if (!zipPreviewFolder) return;
+
+    setDownloadingZip(zipPreviewFolder);
+    try {
+      await downloadFolderAsZip(zipPreviewFolder);
+      toast({
+        title: 'ZIP download successful! 🎉',
+        description: `${zipPreviewFolder}.zip has been downloaded.`,
+        duration: 3000,
+      });
+      setShowZipPreview(false);
+    } catch (error) {
+      console.error('Error downloading ZIP:', error);
+      toast({
+        title: 'ZIP download error',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        variant: 'destructive',
+        duration: 3000,
+      });
+    } finally {
+      setDownloadingZip(null);
+    }
+  };
+
   const handleLoadInViewer = async (itemName: string) => {
     const item = items.find(i => i.name === itemName);
     if (!item || item.type !== 'file' || !item.name.match(/\.nii(\.gz)?$/)) {
@@ -207,7 +282,6 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
         description: `${filename} has been loaded and is ready for analysis.`,
       });
 
-      // Close selection and notify parent
       setShowFolderSelection(false);
       setSelectedFolder(null);
 
@@ -314,9 +388,112 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
     return item.type === 'folder' && item.nifti_count && item.nifti_count > 1;
   };
 
+  const canDownloadAsZip = (item: FileItem) => {
+    return item.type === 'folder' && item.files_count && item.files_count > 0;
+  };
+
   useEffect(() => {
     loadFiles();
   }, []);
+
+  // ZIP Preview Dialog
+  const ZipPreviewDialog = () => (
+    <Dialog open={showZipPreview} onOpenChange={setShowZipPreview}>
+      <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Download {zipPreviewFolder} as ZIP
+          </DialogTitle>
+          <DialogDescription>
+            Preview of files that will be included in the ZIP download.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loadingZipPreview ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+            Loading folder information...
+          </div>
+        ) : zipPreviewInfo && (
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+              <div>
+                <div className="text-sm text-muted-foreground">Total Files</div>
+                <div className="font-semibold">{zipPreviewInfo.total_files}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">NIfTI Files</div>
+                <div className="font-semibold">{zipPreviewInfo.nifti_files_count}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Original Size</div>
+                <div className="font-semibold">{zipPreviewInfo.total_size_mb}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Est. ZIP Size</div>
+                <div className="font-semibold">{zipPreviewInfo.estimated_zip_size_mb}</div>
+              </div>
+            </div>
+
+            {/* File List */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm">Files to be included:</h4>
+              <ScrollArea className="h-48 border rounded-md p-2">
+                <div className="space-y-1">
+                  {zipPreviewInfo.files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between text-xs p-2 hover:bg-muted/50 rounded">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {file.is_nifti ? (
+                          <Brain className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                        ) : (
+                          <File className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        )}
+                        <span className="truncate">{file.relative_path}</span>
+                        {file.is_nifti && (
+                          <Badge variant="outline" className="text-xs">NIfTI</Badge>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground ml-2">{file.size_mb}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowZipPreview(false)}
+                disabled={downloadingZip !== null}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDownloadZip}
+                disabled={downloadingZip !== null}
+                className="flex items-center gap-2"
+              >
+                {downloadingZip ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Creating ZIP...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Download ZIP ({zipPreviewInfo.estimated_zip_size_mb})
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 
   // Folder selection modal
   if (showFolderSelection && selectedFolder) {
@@ -469,7 +646,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => handleUseFolderClick(item)}
-                    disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
+                    disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name || downloadingZip === item.name}
                     className="flex items-center gap-1"
                   >
                     <FolderOpen className="h-3 w-3" />
@@ -483,7 +660,7 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => handleLoadInViewer(item.name)}
-                    disabled={loadingInViewer === item.name || downloading === item.name || deleting === item.name}
+                    disabled={loadingInViewer === item.name || downloading === item.name || deleting === item.name || downloadingZip === item.name}
                     className="flex items-center gap-1"
                   >
                     <Eye className="h-3 w-3" />
@@ -491,21 +668,39 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
                   </Button>
                 )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownload(item.name)}
-                  disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
-                  className="flex items-center gap-1"
-                >
-                  <Download className="h-3 w-3" />
-                  {downloading === item.name ? 'Downloading...' : 'Download'}
-                </Button>
+                {/* Download individual files */}
+                {item.type === 'file' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownload(item.name)}
+                    disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name || downloadingZip === item.name}
+                    className="flex items-center gap-1"
+                  >
+                    <Download className="h-3 w-3" />
+                    {downloading === item.name ? 'Downloading...' : 'Download'}
+                  </Button>
+                )}
+
+                {/* Download folder as ZIP */}
+                {canDownloadAsZip(item) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadZipPreview(item.name)}
+                    disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name || downloadingZip === item.name}
+                    className="flex items-center gap-1"
+                  >
+                    <Archive className="h-3 w-3" />
+                    {downloadingZip === item.name ? 'Creating ZIP...' : 'Download ZIP'}
+                  </Button>
+                )}
+
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleDelete(item.name)}
-                  disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name}
+                  disabled={downloading === item.name || deleting === item.name || loadingInViewer === item.name || downloadingZip === item.name}
                   className="flex items-center gap-1 text-destructive hover:text-destructive"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -516,6 +711,9 @@ export function FileManager({ onFileLoaded }: FileManagerProps) {
           ))}
         </div>
       )}
+
+      {/* ZIP Preview Dialog */}
+      <ZipPreviewDialog />
     </div>
   );
 }

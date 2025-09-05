@@ -441,40 +441,6 @@ export const deleteUploadedFile = async (filename: string): Promise<{ message: s
   return response.json();
 };
 
-/**
- * Download file from backend
- */
-export const downloadFile = async (filename: string): Promise<void> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(filename)}/download`);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcare' }));
-      throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
-    }
-
-    // Obține blob-ul fișierului
-    const blob = await response.blob();
-
-    // Creează un URL temporar pentru blob
-    const url = window.URL.createObjectURL(blob);
-
-    // Creează un link temporar și declanșează descărcarea
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-
-    // Curăță
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-  } catch (error) {
-    console.error('Eroare la descărcarea fișierului:', error);
-    throw error;
-  }
-};
 
 /**
  * Download file as attachment (forces save dialog)
@@ -509,6 +475,77 @@ export const downloadFileAttachment = async (filename: string): Promise<void> =>
     console.error('Eroare la descărcarea attachment:', error);
     throw error;
   }
+};
+
+/**
+ * Download folder as ZIP file
+ */
+export const downloadFolderAsZip = async (folderName: string): Promise<void> => {
+  try {
+    console.log(`[API] Descarcă folderul ca ZIP: ${folderName}`);
+
+    const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(folderName)}/download-zip`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descărcarea ZIP' }));
+      throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
+    }
+
+    // Obține blob-ul ZIP-ului
+    const blob = await response.blob();
+    const zipFilename = `${folderName}.zip`;
+
+    // Creează un URL temporar pentru blob
+    const url = window.URL.createObjectURL(blob);
+
+    // Creează un link temporar și declanșează descărcarea
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = zipFilename;
+    document.body.appendChild(link);
+    link.click();
+
+    // Curăță
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    console.log(`[API] ZIP descărcat cu succes: ${zipFilename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+
+  } catch (error) {
+    console.error('Eroare la descărcarea folder-ului ca ZIP:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get detailed folder information (for preview before download)
+ */
+export const getFolderDetailedInfo = async (folderName: string): Promise<{
+  folder_name: string;
+  folder_path: string;
+  total_files: number;
+  total_size: number;
+  total_size_mb: string;
+  nifti_files_count: number;
+  estimated_zip_size_mb: string;
+  files: Array<{
+    name: string;
+    relative_path: string;
+    size: number;
+    size_mb: string;
+    modified: number;
+    extension: string;
+    is_nifti: boolean;
+  }>;
+}> => {
+  const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(folderName)}/info-detailed`);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Eroare necunoscută' }));
+    throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
+  }
+
+  return response.json();
 };
 
 /**
