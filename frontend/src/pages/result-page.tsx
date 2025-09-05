@@ -1,432 +1,545 @@
 // frontend/src/pages/result-page.tsx
-import { ResultsMriViewer } from '@/components/results-mri-viewer';
-import { Logo } from '@/components/logo';
-import { Button } from '@/components/ui/button';
-import { Link, useNavigate } from 'react-router-dom';
-import { useCineMode } from '@/utils/hooks/use-cine-mode';
-import { MetadataViewerDialog } from '@/components/metadata-viewer-dialog';
-import { useResultStore } from '@/utils/stores/result-store';
-import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BrainCircuit, FileText, Download, BarChart3, Clock, Target, Palette } from 'lucide-react';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { pages } from '@/utils/pages';
-import { useEffect, useState } from 'react';
-import { useToast } from '@/utils/hooks/use-toast';
+import {ResultsMriViewer} from '@/components/results-mri-viewer';
+import {Logo} from '@/components/logo';
+import {Button} from '@/components/ui/button';
+import {Link, useNavigate} from 'react-router-dom';
+import {useCineMode} from '@/utils/hooks/use-cine-mode';
+import {MetadataViewerDialog} from '@/components/metadata-viewer-dialog';
+import {useResultStore} from '@/utils/stores/result-store';
+import {useResultsViewerStore} from '@/utils/stores/results-viewer-store';
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
+import {BarChart3, BrainCircuit, Clock, Download, FileText, Palette, Target} from 'lucide-react';
+import {ScrollArea, ScrollBar} from '@/components/ui/scroll-area';
+import {Badge} from '@/components/ui/badge';
+import {Separator} from '@/components/ui/separator';
+import {pages} from '@/utils/pages';
+import {useEffect, useState} from 'react';
+import {useToast} from '@/utils/hooks/use-toast';
 
 export default function ResultPage() {
-  useCineMode();
-  const { analysisResult, overlayFile, inferenceResult, originalFile } = useResultStore();
-  const { setCurrentFile } = useResultsViewerStore();
-  const { toast } = useToast();
-  const navigate = useNavigate();
+    useCineMode();
+    const {analysisResult, overlayFile, inferenceResult, originalFile} = useResultStore();
+    const {setCurrentFile} = useResultsViewerStore();
+    const {toast} = useToast();
+    const navigate = useNavigate();
 
-  // ADĂUGAT STATE PENTRU DOWNLOAD
-  const [downloadingOverlay, setDownloadingOverlay] = useState(false);
+    // ADĂUGAT STATE PENTRU DOWNLOAD
+    const [downloadingOverlay, setDownloadingOverlay] = useState(false);
 
-  useEffect(() => {
-    // If there is no analysis result, redirect to analysis
-    if (!analysisResult) {
-      navigate(pages.analysis, { replace: true });
-      return;
-    }
+    useEffect(() => {
+        // If there is no analysis result, redirect to analysis
+        if (!analysisResult) {
+            navigate(pages.analysis, {replace: true});
+            return;
+        }
 
-    // Always load overlay file in results (dacă există)
-    if (overlayFile) {
-      setCurrentFile(overlayFile);
-      toast({
-        title: 'AI Analysis Results Loaded',
-        description: 'Displaying T1N + AI segmentation overlay.',
-        duration: 3000,
-      });
-    } else if (originalFile) {
-      // Fallback la original dacă nu există overlay
-      setCurrentFile(originalFile);
-      toast({
-        title: 'Analysis Results Loaded',
-        description: 'Overlay not available, showing original file.',
-        variant: 'destructive',
-      });
-    }
-  }, [analysisResult, navigate, overlayFile, originalFile, setCurrentFile, toast]);
+        // Always load overlay file in results (dacă există)
+        if (overlayFile) {
+            setCurrentFile(overlayFile);
+            toast({
+                title: 'AI Analysis Results Loaded',
+                description: 'Displaying T1N + AI segmentation overlay.',
+                duration: 3000,
+            });
+        } else if (originalFile) {
+            // Fallback la original dacă nu există overlay
+            setCurrentFile(originalFile);
+            toast({
+                title: 'Analysis Results Loaded',
+                description: 'Overlay not available, showing original file.',
+                variant: 'destructive',
+            });
+        }
+    }, [analysisResult, navigate, overlayFile, originalFile, setCurrentFile, toast]);
 
-  // ADĂUGAT HANDLER PENTRU DOWNLOAD OVERLAY
-  const handleDownloadOverlay = async () => {
-  if (!inferenceResult?.folder_name) {
+    // ADĂUGAT HANDLER PENTRU DOWNLOAD OVERLAY
+    const handleDownloadOverlay = async () => {
+        if (!inferenceResult?.folder_name) {
+            toast({
+                title: 'Cannot download overlay',
+                description: 'No analysis results available for download.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setDownloadingOverlay(true);
+
+        try {
+            console.log(`[DOWNLOAD] Downloading overlay for folder: ${inferenceResult.folder_name}`);
+
+            const response = await fetch(`http://localhost:8000/inference/results/${encodeURIComponent(inferenceResult.folder_name)}/download-overlay`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: Failed to download overlay`);
+            }
+
+            const blob = await response.blob();
+            const filename = `${inferenceResult.folder_name}-overlay.nii.gz`;
+
+            // Declanșează download-ul
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            toast({
+                title: 'Overlay downloaded successfully! 🎉',
+                description: `${filename} has been saved to your downloads.`,
+                duration: 4000,
+            });
+
+        } catch (error) {
+            console.error('[DOWNLOAD] Overlay download failed:', error);
+
+            toast({
+                title: 'Download failed',
+                description: error instanceof Error ? error.message : 'Unknown error occurred',
+                variant: 'destructive',
+                duration: 6000,
+            });
+        } finally {
+            setDownloadingOverlay(false);
+        }
+    };
+
+    // ADĂUGAT HANDLER PENTRU DOWNLOAD PDF
+    const handleDownloadPDF = () => {
+        if (!analysisResult) {
+            toast({
+                title: 'Cannot export PDF',
+                description: 'No analysis report available.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        import('jspdf').then(({jsPDF}) => {
+            try {
+                const doc = new jsPDF();
+
+                // Titlu
+                doc.setFontSize(16);
+                doc.text('AI Detailed Report', 14, 20);
+
+                // Linii separatoare
+                doc.setLineWidth(0.5);
+                doc.line(14, 25, 196, 25);
+
+                // Conținut raport
+                doc.setFontSize(10);
+
+                // Split text in pagini
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const margin = 14;
+                const maxLineWidth = pageWidth - margin * 2;
+                const textLines = doc.splitTextToSize(analysisResult, maxLineWidth);
+
+                doc.text(textLines, margin, 35);
+
+                // Salvare fișier
+                const filename = `AI-Report-${inferenceResult.folder_name}-${new Date().toISOString().slice(0, 10)}.pdf`;
+                doc.save(filename);
+
+                toast({
+                    title: 'PDF exported successfully! 🎉',
+                    description: `${filename} has been saved to your downloads.`,
+                    duration: 4000,
+                });
+            } catch (error) {
+                console.error('[PDF EXPORT] Failed:', error);
+                toast({
+                    title: 'Export failed',
+                    description: error instanceof Error ? error.message : 'Unknown error occurred',
+                    variant: 'destructive',
+                });
+            }
+        });
+    };
+
+
+
+
+    const handleDownloadGIF = async () => {
+  if (!overlayFile || !inferenceResult?.folder_name) {
     toast({
-      title: 'Cannot download overlay',
-      description: 'No analysis results available for download.',
+      title: 'Cannot create GIF',
+      description: 'No overlay file available for GIF creation.',
       variant: 'destructive',
     });
     return;
   }
-
-  setDownloadingOverlay(true);
 
   try {
-    console.log(`[DOWNLOAD] Downloading overlay for folder: ${inferenceResult.folder_name}`);
+    // Import gif.js.optimized
+    const { default: GIF } = await import('gif.js.optimized');
 
-    const response = await fetch(`http://localhost:8000/inference/results/${encodeURIComponent(inferenceResult.folder_name)}/download-overlay`);
+    const gif = new GIF({
+      workers: 2,
+      quality: 10,
+      width: 256,
+      height: 256,
+      workerScript: '/gif.worker.js', // IMPORTANT pentru vite
+    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to download overlay`);
+    // Create a canvas to render NIfTI slices
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 256;
+
+    if (!ctx) {
+      throw new Error('Could not create canvas context');
     }
 
-    const blob = await response.blob();
-    const filename = `${inferenceResult.folder_name}-overlay.nii.gz`;
+    // Exemplu: preluăm volumeData din overlayFile (trebuie adaptat după structura ta NIfTI)
+    const volumeData = overlayFile as any;
 
-    // Declanșează download-ul
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+    // Să zicem că avem 50 de cadre pentru GIF
+    const numSlices = 50;
+    const sliceStep = Math.floor(volumeData.dims?.[2] || 100) / numSlices;
 
-    toast({
-      title: 'Overlay downloaded successfully! 🎉',
-      description: `${filename} has been saved to your downloads.`,
-      duration: 4000,
-    });
+    for (let i = 0; i < numSlices; i++) {
+      const sliceIndex = Math.floor(i * sliceStep);
 
-  } catch (error) {
-    console.error('[DOWNLOAD] Overlay download failed:', error);
+      // Curățăm canvasul
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    toast({
-      title: 'Download failed',
-      description: error instanceof Error ? error.message : 'Unknown error occurred',
-      variant: 'destructive',
-      duration: 6000,
-    });
-  } finally {
-    setDownloadingOverlay(false);
-  }
-};
+      // Construim un frame (trebuie să implementezi funcția renderSliceToImageData)
+      const imageData = ctx.createImageData(canvas.width, canvas.height);
+      // renderSliceToImageData(volumeData, sliceIndex, imageData);
 
-  // ADĂUGAT HANDLER PENTRU DOWNLOAD PDF
-const handleDownloadPDF = () => {
-  if (!analysisResult) {
-    toast({
-      title: 'Cannot export PDF',
-      description: 'No analysis report available.',
-      variant: 'destructive',
-    });
-    return;
-  }
+      ctx.putImageData(imageData, 0, 0);
 
-  import('jspdf').then(({ jsPDF }) => {
-    try {
-      const doc = new jsPDF();
+      // Adăugăm frame la GIF
+      gif.addFrame(canvas, { delay: 200 });
+    }
 
-      // Titlu
-      doc.setFontSize(16);
-      doc.text('AI Detailed Report', 14, 20);
+    // Când e gata, descărcăm fișierul
+    gif.on('finished', (blob) => {
+      const filename = `${inferenceResult.folder_name}-overlay.gif`;
 
-      // Linii separatoare
-      doc.setLineWidth(0.5);
-      doc.line(14, 25, 196, 25);
-
-      // Conținut raport
-      doc.setFontSize(10);
-
-      // Split text in pagini
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 14;
-      const maxLineWidth = pageWidth - margin * 2;
-      const textLines = doc.splitTextToSize(analysisResult, maxLineWidth);
-
-      doc.text(textLines, margin, 35);
-
-      // Salvare fișier
-      const filename = `AI-Report-${inferenceResult.folder_name}-${new Date().toISOString().slice(0,10)}.pdf`;
-      doc.save(filename);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
       toast({
-        title: 'PDF exported successfully! 🎉',
+        title: 'GIF created successfully!',
         description: `${filename} has been saved to your downloads.`,
         duration: 4000,
       });
-    } catch (error) {
-      console.error('[PDF EXPORT] Failed:', error);
-      toast({
-        title: 'Export failed',
-        description: error instanceof Error ? error.message : 'Unknown error occurred',
-        variant: 'destructive',
-      });
-    }
-  });
+    });
+
+    gif.render();
+
+  } catch (error) {
+    console.error('[GIF CREATION] Failed:', error);
+    toast({
+      title: 'GIF creation failed',
+      description: error instanceof Error ? error.message : 'Unknown error occurred',
+      variant: 'destructive',
+    });
+  }
 };
 
 
-  const formatTime = (seconds: number) => {
-    return `${seconds.toFixed(2)}s`;
-  };
 
-  const formatClassCount = (count: number) => {
-    return count.toLocaleString();
-  };
-
-  const getClassColor = (classId: number) => {
-    const colors = {
-      1: 'bg-blue-100 text-blue-800 border-blue-200', // NETC
-      2: 'bg-yellow-100 text-yellow-800 border-yellow-200', // SNFH
-      3: 'bg-red-100 text-red-800 border-red-200', // ET
-      4: 'bg-purple-100 text-purple-800 border-purple-200', // RC
+    const formatTime = (seconds: number) => {
+        return `${seconds.toFixed(2)}s`;
     };
-    return colors[classId as keyof typeof colors] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
 
-  const getClassName = (classId: number) => {
-    const names = {
-      1: 'NETC',
-      2: 'SNFH',
-      3: 'ET',
-      4: 'RC'
+    const formatClassCount = (count: number) => {
+        return count.toLocaleString();
     };
-    return names[classId as keyof typeof names] || `Class ${classId}`;
-  };
 
-  // ADĂUGAT HELPER PENTRU STATUS DOWNLOAD
-  const canDownloadOverlay =
-    !downloadingOverlay &&
-    inferenceResult?.folder_name &&
-    overlayFile;
+    const getClassColor = (classId: number) => {
+        const colors = {
+            1: 'bg-blue-100 text-blue-800 border-blue-200', // NETC
+            2: 'bg-yellow-100 text-yellow-800 border-yellow-200', // SNFH
+            3: 'bg-red-100 text-red-800 border-red-200', // ET
+            4: 'bg-purple-100 text-purple-800 border-purple-200', // RC
+        };
+        return colors[classId as keyof typeof colors] || 'bg-gray-100 text-gray-800 border-gray-200';
+    };
 
-  return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-        <Logo />
-        <div className="flex items-center gap-4">
-          <Button variant="outline" asChild className="rounded-full">
-            <Link to={pages.analysis}>
-              Back to Analysis
-            </Link>
-          </Button>
-        </div>
-      </header>
+    const getClassName = (classId: number) => {
+        const names = {
+            1: 'NETC',
+            2: 'SNFH',
+            3: 'ET',
+            4: 'RC'
+        };
+        return names[classId as keyof typeof names] || `Class ${classId}`;
+    };
 
-      <main className="flex flex-1 overflow-hidden">
-        <div className="flex-1 flex flex-col p-4 overflow-hidden min-w-0">
-          <div className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
-            <ResultsMriViewer />
+    // ADĂUGAT HELPER PENTRU STATUS DOWNLOAD
+    const canDownloadOverlay =
+        !downloadingOverlay &&
+        inferenceResult?.folder_name &&
+        overlayFile;
 
-            {/* Fixed indicator - show overlay status */}
-            {overlayFile && (
-              <div className="absolute top-4 left-4 z-10">
-                <Badge
-                  variant="outline"
-                  className="bg-green-100 text-green-800 border-green-200 backdrop-blur-sm"
-                >
-                  🎯 AI Overlay (T1N + Segmentation)
-                </Badge>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="h-full w-full max-w-sm border-l border-border bg-card flex-shrink-0">
-          <Card className="w-full h-full overflow-y-auto rounded-none border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BrainCircuit className="h-6 w-6" />
-                AI Analysis Results
-              </CardTitle>
-              <CardDescription>
-                Automated analysis results for post-treatment glioma segmentation.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-6">
-              {/* ADĂUGAT INDICATOR PENTRU OVERLAY AVAILABILITY */}
-              {overlayFile && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-green-800">AI Overlay Available</span>
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
-                    T1N + Segmentation
-                  </Badge>
+    return (
+        <div className="flex flex-col h-screen bg-background text-foreground">
+            <header className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+                <Logo/>
+                <div className="flex items-center gap-4">
+                    <Button variant="outline" asChild className="rounded-full">
+                        <Link to={pages.analysis}>
+                            Back to Analysis
+                        </Link>
+                    </Button>
                 </div>
-              )}
+            </header>
 
-              {/* Performance metrics */}
-              {inferenceResult && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="font-semibold text-sm">Performance</h3>
-                  </div>
+            <main className="flex flex-1 overflow-hidden">
+                <div className="flex-1 flex flex-col p-4 overflow-hidden min-w-0">
+                    <div
+                        className="w-full h-full bg-black/20 rounded-lg flex items-center justify-center overflow-hidden relative">
+                        <ResultsMriViewer/>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-muted/30 p-2 rounded">
-                      <div className="text-muted-foreground">Preprocess</div>
-                      <div className="font-medium">{formatTime(inferenceResult.timing.preprocess_time)}</div>
+                        {/* Fixed indicator - show overlay status */}
+                        {overlayFile && (
+                            <div className="absolute top-4 left-4 z-10">
+                                <Badge
+                                    variant="outline"
+                                    className="bg-green-100 text-green-800 border-green-200 backdrop-blur-sm"
+                                >
+                                    🎯 AI Overlay (T1N + Segmentation)
+                                </Badge>
+                            </div>
+                        )}
                     </div>
-                    <div className="bg-muted/30 p-2 rounded">
-                      <div className="text-muted-foreground">Inference</div>
-                      <div className="font-medium">{formatTime(inferenceResult.timing.inference_time)}</div>
-                    </div>
-                    <div className="bg-muted/30 p-2 rounded">
-                      <div className="text-muted-foreground">Postprocess</div>
-                      <div className="font-medium">{formatTime(inferenceResult.timing.postprocess_time)}</div>
-                    </div>
-                    <div className="bg-primary/10 p-2 rounded">
-                      <div className="text-muted-foreground">Total</div>
-                      <div className="font-semibold">{formatTime(inferenceResult.timing.total_time)}</div>
-                    </div>
-                  </div>
                 </div>
-              )}
 
-              {/* Segmentation statistics */}
-              {inferenceResult && (
-                <>
-                  <Separator />
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold text-sm">Segmentation Statistics</h3>
-                    </div>
+                <div className="h-full w-full max-w-sm border-l border-border bg-card flex-shrink-0">
+                    <Card className="w-full h-full overflow-y-auto rounded-none border-none">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <BrainCircuit className="h-6 w-6"/>
+                                AI Analysis Results
+                            </CardTitle>
+                            <CardDescription>
+                                Automated analysis results for post-treatment glioma segmentation.
+                            </CardDescription>
+                        </CardHeader>
 
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Total volume:</span>
-                        <span className="font-medium">
+                        <CardContent className="space-y-6">
+                            {/* ADĂUGAT INDICATOR PENTRU OVERLAY AVAILABILITY */}
+                            {overlayFile && (
+                                <div
+                                    className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                        <span className="text-sm font-medium text-green-800">AI Overlay Available</span>
+                                    </div>
+                                    <Badge variant="outline"
+                                           className="text-xs bg-green-100 text-green-700 border-green-300">
+                                        T1N + Segmentation
+                                    </Badge>
+                                </div>
+                            )}
+
+                            {/* Performance metrics */}
+                            {inferenceResult && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Clock className="h-4 w-4 text-muted-foreground"/>
+                                        <h3 className="font-semibold text-sm">Performance</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="bg-muted/30 p-2 rounded">
+                                            <div className="text-muted-foreground">Preprocess</div>
+                                            <div
+                                                className="font-medium">{formatTime(inferenceResult.timing.preprocess_time)}</div>
+                                        </div>
+                                        <div className="bg-muted/30 p-2 rounded">
+                                            <div className="text-muted-foreground">Inference</div>
+                                            <div
+                                                className="font-medium">{formatTime(inferenceResult.timing.inference_time)}</div>
+                                        </div>
+                                        <div className="bg-muted/30 p-2 rounded">
+                                            <div className="text-muted-foreground">Postprocess</div>
+                                            <div
+                                                className="font-medium">{formatTime(inferenceResult.timing.postprocess_time)}</div>
+                                        </div>
+                                        <div className="bg-primary/10 p-2 rounded">
+                                            <div className="text-muted-foreground">Total</div>
+                                            <div
+                                                className="font-semibold">{formatTime(inferenceResult.timing.total_time)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Segmentation statistics */}
+                            {inferenceResult && (
+                                <>
+                                    <Separator/>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Target className="h-4 w-4 text-muted-foreground"/>
+                                            <h3 className="font-semibold text-sm">Segmentation Statistics</h3>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Total volume:</span>
+                                                <span className="font-medium">
                           {inferenceResult.segmentation_info.shape.join(' × ')}
                         </span>
-                      </div>
+                                            </div>
 
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Segmented voxels:</span>
-                        <span className="font-medium">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Segmented voxels:</span>
+                                                <span className="font-medium">
                           {formatClassCount(inferenceResult.segmentation_info.total_segmented_voxels)}
                         </span>
-                      </div>
-                    </div>
+                                            </div>
+                                        </div>
 
-                    {/* Class distribution */}
-                    {Object.entries(inferenceResult.segmentation_info.class_counts)
-                      .filter(([classId]) => parseInt(classId) > 0)
-                      .length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 mb-2">
-                          <BarChart3 className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-xs font-medium">Class distribution:</span>
-                        </div>
+                                        {/* Class distribution */}
+                                        {Object.entries(inferenceResult.segmentation_info.class_counts)
+                                            .filter(([classId]) => parseInt(classId) > 0)
+                                            .length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <BarChart3 className="h-3 w-3 text-muted-foreground"/>
+                                                    <span className="text-xs font-medium">Class distribution:</span>
+                                                </div>
 
-                        <div className="space-y-2">
-                          {Object.entries(inferenceResult.segmentation_info.class_counts)
-                            .filter(([classId]) => parseInt(classId) > 0)
-                            .map(([classId, count]) => (
-                              <div key={classId} className="flex items-center justify-between gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${getClassColor(parseInt(classId))}`}
-                                >
-                                  {getClassName(parseInt(classId))}
-                                </Badge>
-                                <span className="text-xs font-mono">
+                                                <div className="space-y-2">
+                                                    {Object.entries(inferenceResult.segmentation_info.class_counts)
+                                                        .filter(([classId]) => parseInt(classId) > 0)
+                                                        .map(([classId, count]) => (
+                                                            <div key={classId}
+                                                                 className="flex items-center justify-between gap-2">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={`text-xs ${getClassColor(parseInt(classId))}`}
+                                                                >
+                                                                    {getClassName(parseInt(classId))}
+                                                                </Badge>
+                                                                <span className="text-xs font-mono">
                                   {formatClassCount(count)}
                                 </span>
-                              </div>
-                            ))
-                          }
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
 
-              {/* AI Overlay Color Legend - afișat mereu când există overlay */}
-              {overlayFile && (
-                <>
-                  <Separator />
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Palette className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold text-sm">AI Overlay Legend</h3>
-                    </div>
+                            {/* AI Overlay Color Legend - afișat mereu când există overlay */}
+                            {overlayFile && (
+                                <>
+                                    <Separator/>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Palette className="h-4 w-4 text-muted-foreground"/>
+                                            <h3 className="font-semibold text-sm">AI Overlay Legend</h3>
+                                        </div>
 
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground mb-2">
-                        T1N background + colored segmentation overlay
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(100, 180, 255)' }}></div>
-                        <span className="text-xs">NETC - Non-Enhancing Tumor Core</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 255, 150)' }}></div>
-                        <span className="text-xs">SNFH - Surrounding FLAIR Hyperintensity</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(255, 100, 100)' }}></div>
-                        <span className="text-xs">ET - Enhancing Tumor</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded border" style={{ backgroundColor: 'rgb(200, 100, 200)' }}></div>
-                        <span className="text-xs">RC - Resection Cavity</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+                                        <div className="space-y-2">
+                                            <div className="text-xs text-muted-foreground mb-2">
+                                                T1N background + colored segmentation overlay
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border"
+                                                     style={{backgroundColor: 'rgb(100, 180, 255)'}}></div>
+                                                <span className="text-xs">NETC - Non-Enhancing Tumor Core</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border"
+                                                     style={{backgroundColor: 'rgb(255, 255, 150)'}}></div>
+                                                <span className="text-xs">SNFH - Surrounding FLAIR Hyperintensity</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border"
+                                                     style={{backgroundColor: 'rgb(255, 100, 100)'}}></div>
+                                                <span className="text-xs">ET - Enhancing Tumor</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border"
+                                                     style={{backgroundColor: 'rgb(200, 100, 200)'}}></div>
+                                                <span className="text-xs">RC - Resection Cavity</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
-              <Separator />
+                            <Separator/>
 
-              {/* Analysis text */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-semibold text-sm">Detailed Report</h3>
-                </div>
+                            {/* Analysis text */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <FileText className="h-4 w-4 text-muted-foreground"/>
+                                    <h3 className="font-semibold text-sm">Detailed Report</h3>
+                                </div>
 
-                <ScrollArea className="h-[calc(100vh-500px)] w-full rounded-md border p-4">
-                  {analysisResult ? (
-                    <pre className="text-xs whitespace-pre font-mono leading-relaxed min-w-max">
+                                <ScrollArea className="h-[calc(100vh-500px)] w-full rounded-md border p-4">
+                                    {analysisResult ? (
+                                        <pre className="text-xs whitespace-pre font-mono leading-relaxed min-w-max">
                       {analysisResult}
                     </pre>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Loading report...</p>
-                  )}
-                  <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-              </div>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">Loading report...</p>
+                                    )}
+                                    <ScrollBar orientation="horizontal"/>
+                                </ScrollArea>
+                            </div>
 
-              {/* ACTUALIZAT - Action buttons */}
-              <div className="space-y-3 pt-4">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  onClick={handleDownloadPDF}
-                >
-                  <Download className="h-4 w-4" />
-                  Export PDF Report
-                </Button>
+                            {/* ACTUALIZAT - Action buttons */}
+                            <div className="space-y-3 pt-4">
+                                <Button
+                                    variant="outline"
+                                    className="w-full justify-start gap-2"
+                                    onClick={handleDownloadPDF}
+                                >
+                                    <Download className="h-4 w-4"/>
+                                    Export PDF Report
+                                </Button>
 
-                {/* ACTUALIZAT - Download Overlay Button */}
-                <Button
-                  variant="outline"
-                  className="w-full justify-start gap-2"
-                  disabled={!canDownloadOverlay}
-                  onClick={handleDownloadOverlay}
-                >
-                  <Download className="h-4 w-4" />
-                  {downloadingOverlay ? 'Downloading Overlay...' : 'Download AI Overlay'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                                <Button
+                                    variant="outline"
+                                    className="w-full justify-start gap-2"
+                                    disabled={!canDownloadOverlay}
+                                    onClick={handleDownloadOverlay}
+                                >
+                                    <Download className="h-4 w-4"/>
+                                    {downloadingOverlay ? 'Downloading Overlay...' : 'Download AI Overlay'}
+                                </Button>
+
+                                {/* NOU - Download GIF Button */}
+                                <Button
+                                    variant="outline"
+                                    className="w-full justify-start gap-2"
+                                    onClick={handleDownloadGIF}
+                                >
+                                    <Download className="h-4 w-4"/>
+                                    Export GIF Animation
+                                </Button>
+                            </div>
+
+                        </CardContent>
+                    </Card>
+                </div>
+            </main>
+
+            <MetadataViewerDialog/>
         </div>
-      </main>
-
-      <MetadataViewerDialog />
-    </div>
-  );
+    );
 }
