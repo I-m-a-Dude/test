@@ -1,222 +1,261 @@
 // Export utilities for MRI images
-  // Note: Install jsPDF for PDF export functionality: npm install jspdf
 
-  export interface ExportOptions {
-    canvas?: HTMLCanvasElement;
-    filename?: string;
-    metadata?: Record<string, unknown>;
-    includeMetadata?: boolean;
+export interface ExportOptions {
+  canvas?: HTMLCanvasElement;
+  filename?: string;
+  metadata?: Record<string, unknown>;
+  includeMetadata?: boolean;
+  // Video-specific options
+  duration?: number; // Duration in seconds for MP4 export
+  fps?: number; // Frames per second for MP4 export
+}
+
+/**
+ * Export canvas as PNG image
+ */
+export const exportAsPNG = async (options: ExportOptions): Promise<void> => {
+  const { canvas, filename = 'mri-image' } = options;
+
+  if (!canvas) {
+    throw new Error('Canvas is required for export');
   }
 
-  /**
-   * Export canvas as PNG image
-   */
-  export const exportAsPNG = async (options: ExportOptions): Promise<void> => {
-    const { canvas, filename = 'mri-image' } = options;
+  try {
+    // Create a link element and trigger download
+    const link = document.createElement('a');
+    link.download = `${filename}.png`;
+    link.href = canvas.toDataURL('image/png');
 
-    if (!canvas) {
-      throw new Error('Canvas is required for export');
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    console.log('PNG export completed successfully');
+  } catch (error) {
+    console.error('Error exporting PNG:', error);
+    throw new Error('Failed to export PNG image');
+  }
+};
+
+/**
+ * Export canvas as JPEG image
+ */
+export const exportAsJPEG = async (options: ExportOptions): Promise<void> => {
+  const { canvas, filename = 'mri-image' } = options;
+
+  if (!canvas) {
+    throw new Error('Canvas is required for export');
+  }
+
+  try {
+    // Create a link element and trigger download
+    const link = document.createElement('a');
+    link.download = `${filename}.jpg`;
+    link.href = canvas.toDataURL('image/jpeg', 0.95); // High quality JPEG
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    console.log('JPEG export completed successfully');
+  } catch (error) {
+    console.error('Error exporting JPEG:', error);
+    throw new Error('Failed to export JPEG image');
+  }
+};
+
+/**
+ * Export canvas as MP4 video using MediaRecorder API
+ */
+export const exportAsMP4 = async (options: ExportOptions): Promise<void> => {
+  const {
+    canvas,
+    filename = 'mri-video',
+    duration = 5, // Default 5 seconds
+    fps = 30 // Default 30 fps
+  } = options;
+
+  if (!canvas) {
+    throw new Error('Canvas is required for export');
+  }
+
+  try {
+    // Check if MediaRecorder is supported
+    if (!window.MediaRecorder) {
+      throw new Error('MediaRecorder API is not supported in this browser');
     }
 
-    try {
-      // Create a link element and trigger download
-      const link = document.createElement('a');
-      link.download = `${filename}.png`;
-      link.href = canvas.toDataURL('image/png');
+    console.log(`Starting MP4 export: ${duration}s at ${fps}fps`);
 
-      // Trigger download
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    // Get canvas stream
+    const stream = canvas.captureStream(fps);
 
-      console.log('PNG export completed successfully');
-    } catch (error) {
-      console.error('Error exporting PNG:', error);
-      throw new Error('Failed to export PNG image');
-    }
-  };
+    // Setup MediaRecorder
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9', // Use WebM as fallback, will convert filename
+    });
 
-  /**
-   * Export canvas as JPEG image
-   */
-  export const exportAsJPEG = async (options: ExportOptions): Promise<void> => {
-    const { canvas, filename = 'mri-image' } = options;
+    const chunks: Blob[] = [];
 
-    if (!canvas) {
-      throw new Error('Canvas is required for export');
-    }
-
-    try {
-      // Create a link element and trigger download
-      const link = document.createElement('a');
-      link.download = `${filename}.jpg`;
-      link.href = canvas.toDataURL('image/jpeg', 0.95); // High quality JPEG
-
-      // Trigger download
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      console.log('JPEG export completed successfully');
-    } catch (error) {
-      console.error('Error exporting JPEG:', error);
-      throw new Error('Failed to export JPEG image');
-    }
-  };
-
-  /**
-   * Create PDF report using browser APIs only
-   */
-  export const exportAsPDF = async (options: ExportOptions): Promise<void> => {
-    const { canvas, filename = 'mri-report', metadata, includeMetadata = true } = options;
-
-    if (!canvas) {
-      throw new Error('Canvas is required for export');
-    }
-
-    try {
-      // Try to use jsPDF if available, otherwise fallback to simple implementation
-      if (typeof window !== 'undefined' && 'jsPDF' in (window as unknown as Record<string, unknown>)) {
-        const { jsPDF } = (window as unknown as Record<string, unknown>);
-
-        // Create new PDF document
-        const pdf = new (jsPDF as new (options: {
-          orientation: string;
-          unit: string;
-          format: string;
-        }) => {
-          setFontSize: (size: number) => void;
-          setFont: (font: string, style: string) => void;
-          text: (text: string | string[], x: number, y: number) => void;
-          addImage: (data: string, format: string, x: number, y: number, w: number, h: number) => void;
-          addPage: () => void;
-          splitTextToSize: (text: string, maxWidth: number) => string[];
-          save: (filename: string) => void;
-        })({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4'
-        });
-
-        // Add title
-        pdf.setFontSize(20);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('MRI Analysis Report', 20, 25);
-
-        // Add timestamp
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(`Generated on: ${new Date().toLocaleString()}`, 20, 35);
-
-        // Add image
-        const imgData = canvas.toDataURL('image/png');
-        const imgWidth = 120; // mm
-        const imgHeight = (canvas.height / canvas.width) * imgWidth;
-
-        pdf.addImage(imgData, 'PNG', 20, 45, imgWidth, imgHeight);
-
-        // Add metadata if provided
-        if (includeMetadata && metadata) {
-          let yPosition = 45 + imgHeight + 20;
-
-          pdf.setFontSize(14);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text('Image Information', 20, yPosition);
-          yPosition += 10;
-
-          pdf.setFontSize(10);
-          pdf.setFont('helvetica', 'normal');
-
-          Object.entries(metadata).forEach(([key, value]) => {
-            if (yPosition > 280) { // Check if we need a new page
-              pdf.addPage();
-              yPosition = 20;
-            }
-
-            const valueStr = Array.isArray(value) ? value.join(', ') : String(value);
-            const text = `${key}: ${valueStr}`;
-
-            // Handle long text by wrapping
-            const splitText = pdf.splitTextToSize(text, 170);
-            splitText.forEach((line) => {
-              pdf.text(line, 20, yPosition);
-              yPosition += 5;
-            });
-          });
-        }
-
-        // Save the PDF
-        pdf.save(`${filename}.pdf`);
-
-        console.log('PDF export completed successfully');
-      } else {
-        // Fallback: Open image in new window for manual save
-        console.warn('jsPDF not available, opening image in new window');
-        const imgData = canvas.toDataURL('image/png');
-        const newWindow = window.open();
-        if (newWindow) {
-          newWindow.document.write(`
-            <html>
-              <head><title>MRI Report - ${filename}</title></head>
-              <body style="margin: 20px; font-family: Arial, sans-serif;">
-                <h1>MRI Analysis Report</h1>
-                <p>Generated on: ${new Date().toLocaleString()}</p>
-                <img src="${imgData}" style="max-width: 100%; height: auto;" />
-                ${includeMetadata && metadata ? `
-                  <h2>Image Information</h2>
-                  <table border="1" style="border-collapse: collapse; width: 100%;">
-                    ${Object.entries(metadata).map(([key, value]) =>
-                      `<tr><td style="padding: 5px;"><strong>${key}</strong></td><td style="padding: 5px;">${Array.isArray(value) ? value.join(', ') : String(value)}</td></tr>`
-                    ).join('')}
-                  </table>
-                ` : ''}
-                <p><em>Right-click and "Save As" to download this report, or use Ctrl+P to print as PDF.</em></p>
-              </body>
-            </html>
-          `);
-        }
+    // Collect video data
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
       }
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      throw new Error('Failed to export PDF report');
-    }
-  };
+    };
 
-  /**
-   * Export as DICOM (placeholder implementation)
-   * Note: Full DICOM export would require a proper DICOM library
-   */
-  export const exportAsDICOM = async (): Promise<void> => {
-    try {
-      console.warn('DICOM export is not yet fully implemented');
-      alert('DICOM export functionality is coming soon. Please use PNG or PDF export for now.');
-    } catch (error) {
-      console.error('Error exporting DICOM:', error);
-      throw new Error('DICOM export is not yet implemented');
-    }
-  };
+    // Handle recording completion
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
 
-  /**
-   * Get current timestamp for filenames
-   */
-  export const getTimestampedFilename = (baseName: string): string => {
-    const now = new Date();
-    const timestamp = now.toISOString()
-      .replace(/[:.]/g, '-')
-      .slice(0, -5); // Remove milliseconds and Z
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${filename}.webm`; // Note: Browser MediaRecorder typically outputs WebM
 
-    return `${baseName}-${timestamp}`;
-  };
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-  /**
-   * Validate export options
-   */
-  export const validateExportOptions = (options: ExportOptions): void => {
-    if (!options.canvas) {
-      throw new Error('Canvas element is required for export');
-    }
+      // Cleanup
+      URL.revokeObjectURL(url);
 
-    if (!options.canvas.width || !options.canvas.height) {
-      throw new Error('Canvas must have valid dimensions');
-    }
-  };
+      console.log('MP4 export completed successfully');
+    };
+
+    // Handle errors
+    mediaRecorder.onerror = (event) => {
+      console.error('MediaRecorder error:', event);
+      throw new Error('Failed to record video');
+    };
+
+    // Start recording
+    mediaRecorder.start();
+
+    // Stop recording after specified duration
+    setTimeout(() => {
+      mediaRecorder.stop();
+
+      // Stop all tracks to release the stream
+      stream.getTracks().forEach(track => track.stop());
+    }, duration * 1000);
+
+  } catch (error) {
+    console.error('Error exporting MP4:', error);
+    throw new Error(`Failed to export MP4 video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+/**
+ * Export animated MP4 with slice progression
+ * This creates a cine-mode video showing different slices
+ */
+export const exportAsAnimatedMP4 = async (
+  options: ExportOptions & {
+    onRenderFrame?: (slice: number) => void;
+    totalSlices?: number;
+    sliceDelay?: number; // Delay between slices in ms
+  }
+): Promise<void> => {
+  const {
+    canvas,
+    filename = 'mri-cine',
+    duration = 10,
+    fps = 24,
+    totalSlices = 100,
+    sliceDelay = 100,
+    onRenderFrame
+  } = options;
+
+  if (!canvas || !onRenderFrame) {
+    throw new Error('Canvas and onRenderFrame callback are required for animated export');
+  }
+
+  try {
+    console.log(`Starting animated MP4 export: ${totalSlices} slices over ${duration}s`);
+
+    const stream = canvas.captureStream(fps);
+    const mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+    });
+
+    const chunks: Blob[] = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${filename}-animated.webm`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+      console.log('Animated MP4 export completed successfully');
+    };
+
+    mediaRecorder.onerror = (event) => {
+      console.error('MediaRecorder error:', event);
+      throw new Error('Failed to record animated video');
+    };
+
+    // Start recording
+    mediaRecorder.start();
+
+    // Animate through slices
+    let currentSlice = 0;
+    const sliceInterval = setInterval(() => {
+      onRenderFrame(currentSlice);
+      currentSlice = (currentSlice + 1) % totalSlices;
+    }, sliceDelay);
+
+    // Stop recording after duration
+    setTimeout(() => {
+      clearInterval(sliceInterval);
+      mediaRecorder.stop();
+      stream.getTracks().forEach(track => track.stop());
+    }, duration * 1000);
+
+  } catch (error) {
+    console.error('Error exporting animated MP4:', error);
+    throw new Error(`Failed to export animated MP4: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+/**
+ * Get current timestamp for filenames
+ */
+export const getTimestampedFilename = (baseName: string): string => {
+  const now = new Date();
+  const timestamp = now.toISOString()
+    .replace(/[:.]/g, '-')
+    .slice(0, -5); // Remove milliseconds and Z
+
+  return `${baseName}-${timestamp}`;
+};
+
+/**
+ * Validate export options
+ */
+export const validateExportOptions = (options: ExportOptions): void => {
+  if (!options.canvas) {
+    throw new Error('Canvas element is required for export');
+  }
+
+  if (!options.canvas.width || !options.canvas.height) {
+    throw new Error('Canvas must have valid dimensions');
+  }
+};

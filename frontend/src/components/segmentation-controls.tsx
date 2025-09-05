@@ -33,8 +33,6 @@ import { ProfileCurveChart } from './profile-curve-chart';
 import {
   exportAsPNG,
   exportAsJPEG,
-  exportAsPDF,
-  exportAsDICOM,
   getTimestampedFilename,
   validateExportOptions
 } from '@/utils/exportUtils';
@@ -205,47 +203,6 @@ const handleExportJPEG = async () => {
     toast({
       title: 'Export Failed',
       description: 'Failed to export JPEG image. Please try again.',
-      variant: 'destructive',
-    });
-  }
-};
-
-const handleExportPDF = async () => {
-  try {
-    const canvas = canvasRef?.current;
-    validateExportOptions({ canvas: canvas || undefined });
-    const filename = getTimestampedFilename('mri-report');
-    await exportAsPDF({
-      canvas: canvas!,
-      filename,
-      metadata: metadata || undefined,
-      includeMetadata: true,
-    });
-    toast({
-      title: 'Export Successful',
-      description: 'Report exported as PDF successfully.',
-    });
-  } catch (error) {
-    console.error('PDF export failed:', error);
-    toast({
-      title: 'Export Failed',
-      description: 'Failed to export PDF report. Please try again.',
-      variant: 'destructive',
-    });
-  }
-};
-
-const handleExportDICOM = async () => {
-  try {
-    const canvas = canvasRef?.current;
-    validateExportOptions({ canvas: canvas || undefined });
-    const filename = getTimestampedFilename('mri-image');
-    await exportAsDICOM(); // Remove the argument if function expects none
-  } catch (error) {
-    console.error('DICOM export failed:', error);
-    toast({
-      title: 'Export Failed',
-      description: 'DICOM export is not yet implemented.',
       variant: 'destructive',
     });
   }
@@ -521,12 +478,6 @@ const handleExportDICOM = async () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportJPEG} disabled={!canvasRef?.current}>
                   Export as JPEG
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportPDF} disabled={!canvasRef?.current}>
-                  Export PDF Report
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportDICOM} disabled={!canvasRef?.current}>
-                  Export as DICOM
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
