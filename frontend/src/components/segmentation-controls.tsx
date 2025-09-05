@@ -239,95 +239,102 @@ export function SegmentationControls() {
               </div>
             ) : (
               // Professional windowing controls
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm">Window Center (WC)</Label>
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      value={[localWindowCenter]}
-                      onValueChange={handleWindowCenterSliderChange}
-                      onValueCommit={(value) => setWindowCenter(value[0])}
-                      min={centerMin}
-                      max={centerMax}
-                      step={(centerMax - centerMin) / 1000}
-                      disabled={isDisabled}
-                    />
-                    <Input
-                      type="number"
-                      value={localWindowCenter.toFixed(0)}
-                      onChange={handleWindowCenterInputChange}
-                      className="w-20 h-8"
-                      disabled={isDisabled}
-                    />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Window Center (WC)</Label>
+                    <div className="flex items-center gap-2">
+                      <Slider
+                          value={[localWindowCenter]}
+                          onValueChange={handleWindowCenterSliderChange}
+                          onValueCommit={(value) => setWindowCenter(value[0])}
+                          min={centerMin}
+                          max={centerMax}
+                          step={(centerMax - centerMin) / 1000}
+                          disabled={isDisabled}
+                      />
+                      <Input
+                          type="number"
+                          value={localWindowCenter.toFixed(0)}
+                          onChange={handleWindowCenterInputChange}
+                          className="w-20 h-8"
+                          disabled={isDisabled}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Range: {centerMin.toFixed(0)} - {centerMax.toFixed(0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Sets the middle gray level of the display range. Higher values brighten the image.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Range: {centerMin.toFixed(0)} - {centerMax.toFixed(0)}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Window Width (WW)</Label>
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      value={[localWindowWidth]}
-                      onValueChange={handleWindowWidthSliderChange}
-                      onValueCommit={(value) => setWindowWidth(value[0])}
-                      min={widthMin}
-                      max={widthMax}
-                      step={widthMax / 1000}
-                      disabled={isDisabled}
-                    />
-                    <Input
-                      type="number"
-                      value={localWindowWidth.toFixed(0)}
-                      onChange={handleWindowWidthInputChange}
-                      className="w-20 h-8"
-                      disabled={isDisabled}
-                    />
+                  <div className="space-y-2">
+                    <Label className="text-sm">Window Width (WW)</Label>
+                    <div className="flex items-center gap-2">
+                      <Slider
+                          value={[localWindowWidth]}
+                          onValueChange={handleWindowWidthSliderChange}
+                          onValueCommit={(value) => setWindowWidth(value[0])}
+                          min={widthMin}
+                          max={widthMax}
+                          step={widthMax / 1000}
+                          disabled={isDisabled}
+                      />
+                      <Input
+                          type="number"
+                          value={localWindowWidth.toFixed(0)}
+                          onChange={handleWindowWidthInputChange}
+                          className="w-20 h-8"
+                          disabled={isDisabled}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Range: {widthMin} - {widthMax.toFixed(0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Controls the range of intensities displayed. Narrow width increases contrast, wide width shows
+                      more tissue types.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Range: {widthMin} - {widthMax.toFixed(0)}
-                  </p>
-                </div>
 
-                {/* Preset windows for professional mode */}
-                <div className="space-y-2">
-                  <Label className="text-sm">Presets</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => {
-                        const brainCenter = (intensityRange.min + intensityRange.max) / 2;
-                        const brainWidth = (intensityRange.max - intensityRange.min) * 0.6;
-                        setWindowCenter(brainCenter);
-                        setWindowWidth(brainWidth);
-                        setLocalWindowCenter(brainCenter);
-                        setLocalWindowWidth(brainWidth);
-                      }}
-                      disabled={isDisabled}
-                    >
-                      Brain
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => {
-                        const softCenter = intensityRange.min + (intensityRange.max - intensityRange.min) * 0.3;
-                        const softWidth = (intensityRange.max - intensityRange.min) * 0.4;
-                        setWindowCenter(softCenter);
-                        setWindowWidth(softWidth);
-                        setLocalWindowCenter(softCenter);
-                        setLocalWindowWidth(softWidth);
-                      }}
-                      disabled={isDisabled}
-                    >
-                      Soft Tissue
-                    </Button>
+                  {/* Preset windows for professional mode */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Presets</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            const brainCenter = (intensityRange.min + intensityRange.max) / 2;
+                            const brainWidth = (intensityRange.max - intensityRange.min) * 0.6;
+                            setWindowCenter(brainCenter);
+                            setWindowWidth(brainWidth);
+                            setLocalWindowCenter(brainCenter);
+                            setLocalWindowWidth(brainWidth);
+                          }}
+                          disabled={isDisabled}
+                      >
+                        Brain
+                      </Button>
+                      <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            const softCenter = intensityRange.min + (intensityRange.max - intensityRange.min) * 0.3;
+                            const softWidth = (intensityRange.max - intensityRange.min) * 0.4;
+                            setWindowCenter(softCenter);
+                            setWindowWidth(softWidth);
+                            setLocalWindowCenter(softCenter);
+                            setLocalWindowWidth(softWidth);
+                          }}
+                          disabled={isDisabled}
+                      >
+                        Soft Tissue
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
             )}
 
             {/* Slice thickness (always visible) */}
@@ -335,23 +342,23 @@ export function SegmentationControls() {
               <Label className="text-sm">Slice Thickness</Label>
               <div className="flex items-center gap-2">
                 <Slider
-                  value={[localSliceThickness]}
-                  onValueChange={handleSliceThicknessSliderChange}
-                  onValueCommit={(value) => setSliceThickness(value[0])}
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  disabled={isDisabled}
+                    value={[localSliceThickness]}
+                    onValueChange={handleSliceThicknessSliderChange}
+                    onValueCommit={(value) => setSliceThickness(value[0])}
+                    min={1}
+                    max={10}
+                    step={0.5}
+                    disabled={isDisabled}
                 />
                 <Input
-                  type="number"
-                  value={localSliceThickness}
-                  onChange={handleSliceThicknessInputChange}
-                  min={1}
-                  max={10}
-                  step={0.5}
-                  className="w-16 h-8"
-                  disabled={isDisabled}
+                    type="number"
+                    value={localSliceThickness}
+                    onChange={handleSliceThicknessInputChange}
+                    min={1}
+                    max={10}
+                    step={0.5}
+                    className="w-16 h-8"
+                    disabled={isDisabled}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -375,6 +382,11 @@ export function SegmentationControls() {
                   <AreaChart className="h-4 w-4" />
                   {showHistogram ? 'Hide' : 'Show'} Histogram
                 </Button>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Displays pixel intensity distribution across the entire volume.
+                  Useful for image quality assessment, optimal window/level adjustment,
+                  and tissue contrast evaluation. Peaks indicate tissue types with similar intensities.
+                </p>
                 {showHistogram && (
                   <div className="h-40 w-full p-2 border rounded-md">
                     <HistogramChart />
@@ -391,6 +403,11 @@ export function SegmentationControls() {
                   <LineChart className="h-4 w-4" />
                   {showProfileCurves ? 'Hide' : 'Show'} Profile Curves
                 </Button>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Shows intensity values along a central line through the axial slice.
+                  Helps analyze tissue transitions, homogeneity, and anatomical boundaries.
+                  Sharp changes indicate edges between different tissue types.
+                </p>
                  {showProfileCurves && (
                   <div className="h-40 w-full p-2 border rounded-md">
                     <ProfileCurveChart />
