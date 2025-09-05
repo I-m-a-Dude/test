@@ -3,7 +3,6 @@ import {
   BrainCircuit,
   AreaChart,
   LineChart,
-  Download,
   FileText,
   RotateCcw,
   Sliders,
@@ -22,21 +21,8 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { useMriStore } from '@/utils/stores/mri-store';
 import { Separator } from './ui/separator';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { HistogramChart } from './histogram-chart';
 import { ProfileCurveChart } from './profile-curve-chart';
-import {
-  exportAsPNG,
-  exportAsJPEG,
-  getTimestampedFilename,
-  validateExportOptions
-} from '@/utils/exportUtils';
-import { useToast } from '@/utils/hooks/use-toast';
 import { useState } from 'react';
 
 export function SegmentationControls() {
@@ -51,7 +37,6 @@ export function SegmentationControls() {
     intensityRange,
     useWindowing,
     metadata,
-    canvasRef,
     setShowHistogram,
     setShowProfileCurves,
     setBrightness,
@@ -73,7 +58,6 @@ export function SegmentationControls() {
   const [localSliceThickness, setLocalSliceThickness] = useState(sliceThickness);
 
   const file = useMriStore((state) => state.file);
-  const { toast } = useToast();
   const isDisabled = !file;
 
   // Simple brightness/contrast handlers
@@ -160,53 +144,6 @@ export function SegmentationControls() {
       setLocalContrast(100);
     }
   };
-
-// Fix for lines 168, 191, 214, and 239
-const handleExportPNG = async () => {
-  try {
-    const canvas = canvasRef?.current;
-    validateExportOptions({ canvas: canvas || undefined });
-    const filename = getTimestampedFilename('mri-image');
-    await exportAsPNG({
-      canvas: canvas!,
-      filename,
-    });
-    toast({
-      title: 'Export Successful',
-      description: 'Image exported as PNG successfully.',
-    });
-  } catch (error) {
-    console.error('PNG export failed:', error);
-    toast({
-      title: 'Export Failed',
-      description: 'Failed to export PNG image. Please try again.',
-      variant: 'destructive',
-    });
-  }
-};
-
-const handleExportJPEG = async () => {
-  try {
-    const canvas = canvasRef?.current;
-    validateExportOptions({ canvas: canvas || undefined });
-    const filename = getTimestampedFilename('mri-image');
-    await exportAsJPEG({
-      canvas: canvas!,
-      filename,
-    });
-    toast({
-      title: 'Export Successful',
-      description: 'Image exported as JPEG successfully.',
-    });
-  } catch (error) {
-    console.error('JPEG export failed:', error);
-    toast({
-      title: 'Export Failed',
-      description: 'Failed to export JPEG image. Please try again.',
-      variant: 'destructive',
-    });
-  }
-};
 
   return (
     <Card className="w-full h-full overflow-y-auto">
@@ -466,21 +403,6 @@ const handleExportJPEG = async () => {
         <div className="space-y-4">
           <h3 className="font-semibold">Tools</h3>
           <div className="space-y-4 pt-2">
-             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-start gap-2" disabled={isDisabled}>
-                  <Download className="h-4 w-4" /> Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                <DropdownMenuItem onClick={handleExportPNG} disabled={!canvasRef?.current}>
-                  Export as PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportJPEG} disabled={!canvasRef?.current}>
-                  Export as JPEG
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <Button
               variant="outline"
               className="w-full justify-start gap-2"
