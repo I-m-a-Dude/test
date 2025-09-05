@@ -107,19 +107,60 @@ export default function ResultPage() {
   }
 };
 
-  // ADĂUGAT HANDLER PENTRU DOWNLOAD PDF (placeholder)
-  const handleDownloadPDF = () => {
-    toast({
-      title: 'Feature coming soon',
-      description: 'PDF export functionality will be available in a future update.',
-      duration: 3000,
-    });
-  };
-
-  // Render a loading state or null while redirecting to avoid flashing content
+  // ADĂUGAT HANDLER PENTRU DOWNLOAD PDF
+const handleDownloadPDF = () => {
   if (!analysisResult) {
-    return null;
+    toast({
+      title: 'Cannot export PDF',
+      description: 'No analysis report available.',
+      variant: 'destructive',
+    });
+    return;
   }
+
+  import('jspdf').then(({ jsPDF }) => {
+    try {
+      const doc = new jsPDF();
+
+      // Titlu
+      doc.setFontSize(16);
+      doc.text('AI Detailed Report', 14, 20);
+
+      // Linii separatoare
+      doc.setLineWidth(0.5);
+      doc.line(14, 25, 196, 25);
+
+      // Conținut raport
+      doc.setFontSize(10);
+
+      // Split text in pagini
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      const maxLineWidth = pageWidth - margin * 2;
+      const textLines = doc.splitTextToSize(analysisResult, maxLineWidth);
+
+      doc.text(textLines, margin, 35);
+
+      // Salvare fișier
+      const filename = `AI_Detailed_Report_${new Date().toISOString().slice(0,10)}.pdf`;
+      doc.save(filename);
+
+      toast({
+        title: 'PDF exported successfully! 🎉',
+        description: `${filename} has been saved to your downloads.`,
+        duration: 4000,
+      });
+    } catch (error) {
+      console.error('[PDF EXPORT] Failed:', error);
+      toast({
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: 'destructive',
+      });
+    }
+  });
+};
+
 
   const formatTime = (seconds: number) => {
     return `${seconds.toFixed(2)}s`;
