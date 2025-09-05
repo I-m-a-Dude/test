@@ -9,7 +9,7 @@ import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BrainCircuit, FileText, Download, BarChart3, Clock, Target, Palette } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'; // FIXED: Added ScrollBar import
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { pages } from '@/utils/pages';
@@ -253,7 +253,7 @@ export default function ResultPage() {
 
               <Separator />
 
-              {/* Analysis text */}
+              {/* Analysis text - FIXED: Added horizontal scroll */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-3">
                   <FileText className="h-4 w-4 text-muted-foreground" />
@@ -262,12 +262,14 @@ export default function ResultPage() {
 
                 <ScrollArea className="h-[calc(100vh-500px)] w-full rounded-md border p-4">
                   {analysisResult ? (
-                    <pre className="text-xs whitespace-pre-wrap font-mono leading-relaxed">
+                    <pre className="text-xs whitespace-pre font-mono leading-relaxed min-w-max">
                       {analysisResult}
                     </pre>
                   ) : (
                     <p className="text-sm text-muted-foreground">Loading report...</p>
                   )}
+                  {/* FIXED: Add horizontal scrollbar */}
+                  <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </div>
 
