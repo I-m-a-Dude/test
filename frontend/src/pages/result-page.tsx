@@ -161,92 +161,192 @@ export default function ResultPage() {
         });
     };
 
-
-
-
     const handleDownloadGIF = async () => {
-  if (!overlayFile || !inferenceResult?.folder_name) {
+  // Verifică ce fișier să folosească (prioritate: overlay, apoi original)
+  const fileToUse = overlayFile || originalFile;
+
+  if (!fileToUse || !inferenceResult?.folder_name) {
     toast({
       title: 'Cannot create GIF',
-      description: 'No overlay file available for GIF creation.',
+      description: 'No file available for GIF creation.',
       variant: 'destructive',
     });
     return;
   }
 
   try {
+    toast({
+      title: 'Creating GIF animation...',
+      description: 'This may take a few moments. Please wait.',
+      duration: 2000,
+    });
+
+    // Import nifti-reader-js pentru citirea datelor
+    const nifti = await import('nifti-reader-js');
+    const pako = await import('pako');
+
     // Import gif.js.optimized
     const { default: GIF } = await import('gif.js.optimized');
+
+    console.log('[GIF] Starting GIF creation with file:', fileToUse.name);
+
+    // 1. LOAD & PARSE NIFTI FILE
+    const fileBuffer = await fileToUse.arrayBuffer();
+    let niftiBuffer = fileBuffer;
+
+    // Decompress dacă e necesar
+    if (nifti.isCompressed && nifti.isCompressed(niftiBuffer)) {
+      console.log('[GIF] Decompressing file...');
+      niftiBuffer = pako.inflate(new Uint8Array(niftiBuffer)).buffer;
+    }
+
+    // Verifică dacă e fișier NIfTI valid
+    if (nifti.isNIFTI && !nifti.isNIFTI(niftiBuffer)) {
+      throw new Error('Invalid NIfTI file');
+    }
+
+    const header = nifti.readHeader(niftiBuffer);
+    const image = nifti.readImage(header, niftiBuffer);
+
+    if (!header || !image) {
+      throw new Error('Failed to read NIfTI data');
+    }
+
+    console.log('[GIF] NIfTI loaded:', {
+      dims: header.dims,
+      datatype: header.datatype
+    });
+
+    // 2. CONFIGURARE GIF
+    const dims = header.dims;
+    const zDim = dims[3] || 1;  // Numărul de slice-uri axiale
+
+    // Determină dimensiunile canvas-ului bazat pe orientarea axială
+    const canvasWidth = Math.min(dims[1] || 256, 1024);   // Max 512px width
+    const canvasHeight = Math.min(dims[2] || 256, 1024);  // Max 512px height
 
     const gif = new GIF({
       workers: 2,
       quality: 10,
-      width: 256,
-      height: 256,
-      workerScript: '/gif.worker.js', // IMPORTANT pentru vite
+      width: canvasWidth,
+      height: canvasHeight,
+      workerScript: '/gif.worker.js',
     });
 
-    // Create a canvas to render NIfTI slices
+    console.log('[GIF] Canvas size:', { canvasWidth, canvasHeight });
+    console.log('[GIF] Total slices to process:', zDim);
+
+    // 3. CREATE CANVAS pentru renderare
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 256;
-    canvas.height = 256;
 
     if (!ctx) {
       throw new Error('Could not create canvas context');
     }
 
-    // Exemplu: preluăm volumeData din overlayFile (trebuie adaptat după structura ta NIfTI)
-    const volumeData = overlayFile as any;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
 
-    // Să zicem că avem 50 de cadre pentru GIF
-    const numSlices = 50;
-    const sliceStep = Math.floor(volumeData.dims?.[2] || 100) / numSlices;
+    // 4. IMPORT DRAWING FUNCTIONS
+    const { drawSlice, drawSliceWithOverlay } = await import('@/utils/mriUtils');
 
-    for (let i = 0; i < numSlices; i++) {
-      const sliceIndex = Math.floor(i * sliceStep);
+    // Detectează tipul de fișier
+    const isOverlay = fileToUse.name.toLowerCase().includes('overlay');
+    const drawFunction = isOverlay ? drawSliceWithOverlay : drawSlice;
 
-      // Curățăm canvasul
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    console.log('[GIF] Using draw function:', isOverlay ? 'drawSliceWithOverlay' : 'drawSlice');
 
-      // Construim un frame (trebuie să implementezi funcția renderSliceToImageData)
-      const imageData = ctx.createImageData(canvas.width, canvas.height);
-      // renderSliceToImageData(volumeData, sliceIndex, imageData);
+    // 5. GENERARE FRAMES
+    const totalFrames = Math.min(zDim, 100); // Limitează la max 100 frame-uri
+    const sliceStep = zDim > totalFrames ? zDim / totalFrames : 1;
 
-      ctx.putImageData(imageData, 0, 0);
+    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+      const sliceIndex = Math.floor(frameIndex * sliceStep);
 
-      // Adăugăm frame la GIF
-      gif.addFrame(canvas, { delay: 200 });
+      try {
+        // Renderează slice-ul curent
+        drawFunction({
+          canvas: canvas,
+          header: header,
+          image: image,
+          slice: sliceIndex,
+          axis: 'axial', // Folosește mereu axial pentru GIF
+          brightness: 100, // Setări standard
+          contrast: 100,
+          windowCenter: 128,
+          windowWidth: 256,
+          sliceThickness: 1,
+          useWindowing: false,
+          filename: fileToUse.name
+        });
+
+        // Adaugă frame-ul la GIF
+        gif.addFrame(canvas, {
+          delay: 150,  // 150ms între frame-uri (6.7 FPS)
+          copy: true   // Important: copiază datele canvas-ului
+        });
+
+        console.log(`[GIF] Processed frame ${frameIndex + 1}/${totalFrames} (slice ${sliceIndex})`);
+
+      } catch (drawError) {
+        console.warn(`[GIF] Failed to draw slice ${sliceIndex}:`, drawError);
+        // Continuă cu următorul frame
+      }
     }
 
-    // Când e gata, descărcăm fișierul
+    console.log('[GIF] All frames added, rendering GIF...');
+
+    // 6. CONFIGURARE DOWNLOAD
     gif.on('finished', (blob) => {
-      const filename = `${inferenceResult.folder_name}-overlay.gif`;
+      try {
+        const filename = `${inferenceResult.folder_name}-animation.gif`;
 
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
 
-      toast({
-        title: 'GIF created successfully!',
-        description: `${filename} has been saved to your downloads.`,
-        duration: 4000,
-      });
+        console.log('[GIF] Download triggered for:', filename);
+
+        toast({
+          title: 'GIF animation created! 🎬',
+          description: `${filename} has been saved to your downloads. (High quality 800px)`,
+          duration: 4000,
+        });
+      } catch (downloadError) {
+        console.error('[GIF] Download failed:', downloadError);
+        toast({
+          title: 'Download failed',
+          description: 'GIF was created but download failed.',
+          variant: 'destructive',
+        });
+      }
     });
 
+    gif.on('progress', (progress) => {
+      console.log(`[GIF] Rendering progress: ${(progress * 100).toFixed(1)}%`);
+    });
+
+    // 7. START RENDERING
     gif.render();
 
   } catch (error) {
     console.error('[GIF CREATION] Failed:', error);
+
+    let errorMessage = 'Unknown error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
     toast({
       title: 'GIF creation failed',
-      description: error instanceof Error ? error.message : 'Unknown error occurred',
+      description: errorMessage,
       variant: 'destructive',
+      duration: 6000,
     });
   }
 };
