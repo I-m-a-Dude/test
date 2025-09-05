@@ -15,7 +15,6 @@ import { Separator } from '@/components/ui/separator';
 import { pages } from '@/utils/pages';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/utils/hooks/use-toast';
-import { downloadOverlayResult } from '@/utils/api'; // ADĂUGAT IMPORT
 
 export default function ResultPage() {
   useCineMode();
