@@ -68,7 +68,6 @@ export default function ResultPage() {
   try {
     console.log(`[DOWNLOAD] Downloading overlay for folder: ${inferenceResult.folder_name}`);
 
-    // ✅ MANUAL FETCH + DOWNLOAD TRIGGER
     const response = await fetch(`http://localhost:8000/inference/results/${encodeURIComponent(inferenceResult.folder_name)}/download-overlay`);
 
     if (!response.ok) {
