@@ -9,12 +9,13 @@ import { useResultStore } from '@/utils/stores/result-store';
 import { useResultsViewerStore } from '@/utils/stores/results-viewer-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BrainCircuit, FileText, Download, BarChart3, Clock, Target, Palette } from 'lucide-react';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'; // FIXED: Added ScrollBar import
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { pages } from '@/utils/pages';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '@/utils/hooks/use-toast';
+import { downloadOverlayResult } from '@/utils/api'; // ADĂUGAT IMPORT
 
 export default function ResultPage() {
   useCineMode();
@@ -22,6 +23,9 @@ export default function ResultPage() {
   const { setCurrentFile } = useResultsViewerStore();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // ADĂUGAT STATE PENTRU DOWNLOAD
+  const [downloadingOverlay, setDownloadingOverlay] = useState(false);
 
   useEffect(() => {
     // If there is no analysis result, redirect to analysis
@@ -48,6 +52,71 @@ export default function ResultPage() {
       });
     }
   }, [analysisResult, navigate, overlayFile, originalFile, setCurrentFile, toast]);
+
+  // ADĂUGAT HANDLER PENTRU DOWNLOAD OVERLAY
+  const handleDownloadOverlay = async () => {
+  if (!inferenceResult?.folder_name) {
+    toast({
+      title: 'Cannot download overlay',
+      description: 'No analysis results available for download.',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  setDownloadingOverlay(true);
+
+  try {
+    console.log(`[DOWNLOAD] Downloading overlay for folder: ${inferenceResult.folder_name}`);
+
+    // ✅ MANUAL FETCH + DOWNLOAD TRIGGER
+    const response = await fetch(`http://localhost:8000/inference/results/${encodeURIComponent(inferenceResult.folder_name)}/download-overlay`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: Failed to download overlay`);
+    }
+
+    const blob = await response.blob();
+    const filename = `${inferenceResult.folder_name}-overlay.nii.gz`;
+
+    // Declanșează download-ul
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Overlay downloaded successfully! 🎉',
+      description: `${filename} has been saved to your downloads.`,
+      duration: 4000,
+    });
+
+  } catch (error) {
+    console.error('[DOWNLOAD] Overlay download failed:', error);
+
+    toast({
+      title: 'Download failed',
+      description: error instanceof Error ? error.message : 'Unknown error occurred',
+      variant: 'destructive',
+      duration: 6000,
+    });
+  } finally {
+    setDownloadingOverlay(false);
+  }
+};
+
+  // ADĂUGAT HANDLER PENTRU DOWNLOAD PDF (placeholder)
+  const handleDownloadPDF = () => {
+    toast({
+      title: 'Feature coming soon',
+      description: 'PDF export functionality will be available in a future update.',
+      duration: 3000,
+    });
+  };
 
   // Render a loading state or null while redirecting to avoid flashing content
   if (!analysisResult) {
@@ -81,6 +150,12 @@ export default function ResultPage() {
     };
     return names[classId as keyof typeof names] || `Class ${classId}`;
   };
+
+  // ADĂUGAT HELPER PENTRU STATUS DOWNLOAD
+  const canDownloadOverlay =
+    !downloadingOverlay &&
+    inferenceResult?.folder_name &&
+    overlayFile;
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
@@ -127,6 +202,19 @@ export default function ResultPage() {
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {/* ADĂUGAT INDICATOR PENTRU OVERLAY AVAILABILITY */}
+              {overlayFile && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-sm font-medium text-green-800">AI Overlay Available</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
+                    T1N + Segmentation
+                  </Badge>
+                </div>
+              )}
+
               {/* Performance metrics */}
               {inferenceResult && (
                 <div className="space-y-4">
@@ -253,7 +341,7 @@ export default function ResultPage() {
 
               <Separator />
 
-              {/* Analysis text - FIXED: Added horizontal scroll */}
+              {/* Analysis text */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-3">
                   <FileText className="h-4 w-4 text-muted-foreground" />
@@ -268,20 +356,30 @@ export default function ResultPage() {
                   ) : (
                     <p className="text-sm text-muted-foreground">Loading report...</p>
                   )}
-                  {/* FIXED: Add horizontal scrollbar */}
                   <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </div>
 
-              {/* Action buttons */}
+              {/* ACTUALIZAT - Action buttons */}
               <div className="space-y-3 pt-4">
-                <Button variant="outline" className="w-full justify-start gap-2" disabled>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={handleDownloadPDF}
+                >
                   <Download className="h-4 w-4" />
                   Export PDF Report
                 </Button>
-                <Button variant="outline" className="w-full justify-start gap-2" disabled>
+
+                {/* ACTUALIZAT - Download Overlay Button */}
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  disabled={!canDownloadOverlay}
+                  onClick={handleDownloadOverlay}
+                >
                   <Download className="h-4 w-4" />
-                  Download AI Overlay
+                  {downloadingOverlay ? 'Downloading Overlay...' : 'Download AI Overlay'}
                 </Button>
               </div>
             </CardContent>
