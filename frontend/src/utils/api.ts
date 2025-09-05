@@ -134,38 +134,6 @@ export const runInferenceOnFolder = async (folderName: string): Promise<Inferenc
   return response.json();
 };
 
-/*
- * Download segmentation result
- */
-export const downloadSegmentationResult = async (folderName: string): Promise<File> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/inference/results/${encodeURIComponent(folderName)}/download-segmentation`);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Eroare la descarcarea segmentării' }));
-      throw new Error(errorData.detail || `Eroare HTTP: ${response.status}`);
-    }
-
-    // Get the blob
-    const blob = await response.blob();
-
-    // Create File object for the segmentation
-    const segmentationFilename = `${folderName}-seg.nii.gz`;
-    const file = new File([blob], segmentationFilename, {
-      type: blob.type || 'application/gzip',
-      lastModified: Date.now()
-    });
-
-    console.log(`[API] Segmentare descărcată: ${segmentationFilename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-
-    return file;
-
-  } catch (error) {
-    console.error('Eroare la descărcarea segmentării:', error);
-    throw error;
-  }
-};
-
 
 /**
  * Download overlay result (T1N + segmentation)
