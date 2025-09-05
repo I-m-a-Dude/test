@@ -142,7 +142,7 @@ const handleDownloadPDF = () => {
       doc.text(textLines, margin, 35);
 
       // Salvare fișier
-      const filename = `AI_Detailed_Report_${new Date().toISOString().slice(0,10)}.pdf`;
+      const filename = `AI-Report-${inferenceResult.folder_name}-${new Date().toISOString().slice(0,10)}.pdf`;
       doc.save(filename);
 
       toast({
